@@ -119,8 +119,6 @@ function getBikeSuggestions(query: string, bikes: Bike[]): Bike[] {
 const specifications = (value?: number, unit = "") =>
   value == null ? "Not available" : `${value}${unit}`;
 
-/* One photo per bike, with Wikimedia Commons and Wikipedia fallback. */
-
 type Photo = {
   url: string;
   page: string;
@@ -354,7 +352,9 @@ function BikePhoto({ name }: { name: string }) {
       ) : (
         <div className="bike-photo-placeholder">
           <span className="bike-photo-icon">🏍️</span>
-          <small>{loading ? "Finding bike photo..." : "Photo unavailable"}</small>
+          <small>
+            {loading ? "Finding bike photo..." : "Photo unavailable"}
+          </small>
           {!loading && (
             <a
               href={`https://commons.wikimedia.org/wiki/Special:MediaSearch?type=image&search=${encodeURIComponent(name + " motorcycle")}`}
@@ -369,11 +369,6 @@ function BikePhoto({ name }: { name: string }) {
     </div>
   );
 }
-
-/*
- * Reusable autocomplete input.
- * User can type, edit spelling, see live suggestions and select a result.
- */
 
 type BikeAutocompleteProps = {
   id: string;
@@ -428,7 +423,6 @@ function BikeAutocomplete({
           setQuery(next);
           setFocused(true);
 
-          // If the user clears the box, clear the selected bike too.
           if (!next.trim()) onSelect("");
         }}
         onKeyDown={(event) => {
@@ -457,9 +451,7 @@ function BikeAutocomplete({
                   onClick={() => chooseBike(bike)}
                 >
                   <span>{bike.name}</span>
-                  <small>
-                    {specifications(bike.mileage, " km/L")}
-                  </small>
+                  <small>{specifications(bike.mileage, " km/L")}</small>
                 </button>
               ))}
             </>
@@ -506,6 +498,18 @@ function App() {
   const [dailyKm, setDailyKm] = useState("30");
   const [days, setDays] = useState("30");
   const [tab, setTab] = useState("search");
+
+  // Manual mileage is used only if the selected bike has no catalogue mileage.
+  const [manualMileageA, setManualMileageA] = useState("");
+  const [manualMileageB, setManualMileageB] = useState("");
+
+  useEffect(() => {
+    setManualMileageA("");
+  }, [first]);
+
+  useEffect(() => {
+    setManualMileageB("");
+  }, [second]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -578,7 +582,9 @@ function App() {
       } catch (error) {
         if (!controller.signal.aborted) {
           console.error("Bike catalogue error:", error);
-          setDbMessage("Online catalogue unavailable. Sample bikes are ready.");
+          setDbMessage(
+            "Online catalogue unavailable. Sample bikes are ready."
+          );
         }
       } finally {
         if (!controller.signal.aborted) setDbLoading(false);
@@ -617,10 +623,37 @@ function App() {
   const numberOfDays = Math.max(0, Number(days) || 0);
   const totalKm = km * numberOfDays;
 
-  const costFor = (bike: Bike): number | null =>
-    bike.mileage != null && bike.mileage > 0
-      ? (totalKm / bike.mileage) * price
+  // Catalogue mileage takes priority. Manual mileage is the fallback.
+  const effectiveMileage = (
+    bike: Bike | undefined,
+    manualValue: string
+  ): number | null => {
+    if (!bike) return null;
+
+    if (bike.mileage != null && bike.mileage > 0) {
+      return bike.mileage;
+    }
+
+    const entered = Number(manualValue);
+
+    return manualValue.trim() !== "" &&
+      Number.isFinite(entered) &&
+      entered > 0 &&
+      entered <= 200
+      ? entered
       : null;
+  };
+
+  const mileageA = effectiveMileage(bikeA, manualMileageA);
+  const mileageB = effectiveMileage(bikeB, manualMileageB);
+
+  const costFor = (mileage: number | null): number | null =>
+    mileage != null
+      ? (totalKm / mileage) * price
+      : null;
+
+  const costA = costFor(mileageA);
+  const costB = costFor(mileageB);
 
   function runSearch(event?: React.FormEvent<HTMLFormElement>) {
     event?.preventDefault();
@@ -698,7 +731,8 @@ function App() {
       };
 
       setMessage(
-        errors[code] ?? "Authentication failed. Firebase settings check cheyyu."
+        errors[code] ??
+          "Authentication failed. Firebase settings check cheyyu."
       );
     } finally {
       setSending(false);
@@ -736,14 +770,22 @@ function App() {
             <div className="theme-options">
               <button
                 type="button"
-                className={theme === "light" ? "theme-choice theme-selected" : "theme-choice"}
+                className={
+                  theme === "light"
+                    ? "theme-choice theme-selected"
+                    : "theme-choice"
+                }
                 onClick={() => setTheme("light")}
               >
                 ☀️ Light Mode
               </button>
               <button
                 type="button"
-                className={theme === "dark" ? "theme-choice theme-selected" : "theme-choice"}
+                className={
+                  theme === "dark"
+                    ? "theme-choice theme-selected"
+                    : "theme-choice"
+                }
                 onClick={() => setTheme("dark")}
               >
                 🌙 Dark Mode
@@ -777,7 +819,9 @@ function App() {
         <SettingsButton />
 
         <section className="panel">
-          <h2>🔐 {authMode === "login" ? "Welcome Back" : "Create Account"}</h2>
+          <h2>
+            🔐 {authMode === "login" ? "Welcome Back" : "Create Account"}
+          </h2>
           <p>
             {authMode === "login"
               ? "Emailum passwordum use cheythu login cheyyu."
@@ -833,7 +877,9 @@ function App() {
               : "Already have an account? Login"}
           </button>
 
-          {message && <p role="status" className="muted">{message}</p>}
+          {message && (
+            <p role="status" className="muted">{message}</p>
+          )}
         </section>
 
         <footer>Created by Nidhin ❤️</footer>
@@ -860,7 +906,9 @@ function App() {
           <button className="secondary" type="button" onClick={handleLogout}>
             Log out
           </button>
-          {message && <p role="status" className="muted">{message}</p>}
+          {message && (
+            <p role="status" className="muted">{message}</p>
+          )}
         </details>
       </section>
 
@@ -890,7 +938,9 @@ function App() {
           <section className="panel">
             <h2>🔎 Find a bike</h2>
             <p className="muted">
-              {dbLoading ? "Loading online bike catalogue..." : dbMessage}
+              {dbLoading
+                ? "Loading online bike catalogue..."
+                : dbMessage}
             </p>
 
             <form onSubmit={runSearch}>
@@ -962,7 +1012,9 @@ function App() {
                   <div>
                     <span>Indicative price</span>
                     <strong>
-                      {bikeA.price == null ? "Not available" : `${money(bikeA.price)}*`}
+                      {bikeA.price == null
+                        ? "Not available"
+                        : `${money(bikeA.price)}*`}
                     </strong>
                   </div>
                 </div>
@@ -979,7 +1031,9 @@ function App() {
                 </p>
               </>
             ) : (
-              <p className="muted">Select a bike to see its details.</p>
+              <p className="muted">
+                Select a bike to see its details.
+              </p>
             )}
           </section>
         </>
@@ -1025,7 +1079,9 @@ function App() {
                   <p>
                     <span>Indicative price</span>
                     <strong>
-                      {bike.price == null ? "Not available" : `${money(bike.price)}*`}
+                      {bike.price == null
+                        ? "Not available"
+                        : `${money(bike.price)}*`}
                     </strong>
                   </p>
                   <p>
@@ -1101,32 +1157,86 @@ function App() {
           />
 
           <div className="compare-grid">
-            {[bikeA, bikeB].map((bike, index) => {
+            {[
+              {
+                bike: bikeA,
+                mileage: mileageA,
+                manual: manualMileageA,
+                setManual: setManualMileageA,
+                cost: costA,
+                label: "First bike",
+              },
+              {
+                bike: bikeB,
+                mileage: mileageB,
+                manual: manualMileageB,
+                setManual: setManualMileageB,
+                cost: costB,
+                label: "Second bike",
+              },
+            ].map((item) => {
+              const { bike, mileage, manual, setManual, cost, label } = item;
+
               if (!bike) return null;
-              const cost = costFor(bike);
 
               return (
-                <div className="compare-card" key={`${bike.name}-${index}`}>
+                <div className="compare-card" key={label}>
                   <BikePhoto name={bike.name} />
                   <h3>{bike.name}</h3>
+
+                  {bike.mileage == null || bike.mileage <= 0 ? (
+                    <div className="manual-mileage">
+                      <label htmlFor={`manual-${label}`}>
+                        Your mileage (km/L)
+                      </label>
+                      <input
+                        id={`manual-${label}`}
+                        type="number"
+                        min="0.1"
+                        max="200"
+                        step="0.1"
+                        inputMode="decimal"
+                        placeholder="Enter mileage, e.g. 35"
+                        value={manual}
+                        onChange={(e) => setManual(e.target.value)}
+                      />
+                      <small className="muted">
+                        Database mileage unavailable. Enter your own mileage.
+                      </small>
+                    </div>
+                  ) : null}
+
                   <p>
-                    <span>Estimated total fuel cost</span>
-                    <strong>{cost == null ? "Not available" : money(cost)}</strong>
+                    <span>Used mileage</span>
+                    <strong>
+                      {mileage == null
+                        ? "Enter mileage above"
+                        : `${mileage} km/L`}
+                    </strong>
                   </p>
+
                   <p>
                     <span>Estimated fuel required</span>
                     <strong>
-                      {bike.mileage == null || bike.mileage <= 0
+                      {mileage == null
                         ? "Not available"
-                        : `${(totalKm / bike.mileage).toFixed(2)} L`}
+                        : `${(totalKm / mileage).toFixed(2)} L`}
                     </strong>
                   </p>
+
+                  <p>
+                    <span>Estimated total fuel cost</span>
+                    <strong>
+                      {cost == null ? "Not available" : money(cost)}
+                    </strong>
+                  </p>
+
                   <p>
                     <span>Daily cost</span>
                     <strong>
-                      {bike.mileage == null || bike.mileage <= 0
+                      {mileage == null
                         ? "Not available"
-                        : money((km / bike.mileage) * price)}
+                        : money((km / mileage) * price)}
                     </strong>
                   </p>
                 </div>
@@ -1137,20 +1247,24 @@ function App() {
           <div className="result">
             <span>Estimated difference over {numberOfDays} days</span>
             <strong>
-              {!bikeA || !bikeB || costFor(bikeA) == null || costFor(bikeB) == null
-                ? "Not available"
-                : money(Math.abs(costFor(bikeA)! - costFor(bikeB)!))}
+              {costA == null || costB == null
+                ? "Enter mileage for both bikes"
+                : money(Math.abs(costA - costB))}
             </strong>
+
             <p>
-              {!bikeA || !bikeB ||
-              bikeA.mileage == null || bikeB.mileage == null ||
-              bikeA.mileage <= 0 || bikeB.mileage <= 0
-                ? "Comparison-inu randu bikes-inte mileage data venam."
-                : bikeA.mileage === bikeB.mileage
-                  ? "Both bikes have the same listed mileage."
-                  : `${bikeA.mileage > bikeB.mileage ? bikeA.name : bikeB.name} has the higher listed mileage.`}
+              {mileageA == null || mileageB == null
+                ? "Comparison-inu randu bikes-inte mileage venam."
+                : mileageA === mileageB
+                  ? "Both bikes have the same mileage value."
+                  : `${mileageA > mileageB ? bikeA?.name : bikeB?.name} has the higher mileage value entered.`}
             </p>
           </div>
+
+          <p className="muted">
+            Manual mileage is used only when catalogue mileage is unavailable.
+            Results are estimates based on the values entered.
+          </p>
         </section>
       )}
 
