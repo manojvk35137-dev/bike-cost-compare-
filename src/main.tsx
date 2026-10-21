@@ -66,90 +66,70 @@ function editDistance(a: string, b: string): number {
 
 function getBikeSuggestions(query: string, bikes: Bike[]): Bike[] {
   const q = normalize(query);
-  if (!q) return bikes.slice(0, 10);
+  if (!q) return [];
 
-  const directMatches = bikes.filter((bike) =>
+  const direct = bikes.filter((bike) =>
     normalize(bike.name).includes(q)
   );
-  if (directMatches.length) return directMatches.slice(0, 10);
 
-  const queryWords = q.split(" ").filter(Boolean);
-  if (!queryWords.length) return [];
+  if (direct.length) return direct.slice(0, 8);
 
-  const ranked: Array<{ bike: Bike; score: number }> = [];
+  const queryWords = q.split(" ");
+  const ranked: { bike: Bike; score: number }[] = [];
 
   for (const bike of bikes) {
-    const bikeWords = normalize(bike.name).split(" ").filter(Boolean);
-    let totalScore = 0;
-    let allWordsMatched = true;
+    const bikeWords = normalize(bike.name).split(" ");
+    let score = 0;
+    let matchedAll = true;
 
-    for (const queryWord of queryWords) {
-      let bestScore = Infinity;
+    for (const word of queryWords) {
+      let best = Infinity;
 
-      for (const bikeWord of bikeWords) {
-        if (bikeWord === queryWord || bikeWord.startsWith(queryWord)) {
-          bestScore = 0;
+      for (const candidate of bikeWords) {
+        if (candidate === word || candidate.startsWith(word)) {
+          best = 0;
           break;
         }
 
-        if (queryWord.length <= 3) continue;
+        if (word.length < 4) continue;
 
-        const distance = editDistance(queryWord, bikeWord);
-        const allowedDistance = queryWord.length >= 5 ? 2 : 1;
+        const distance = editDistance(word, candidate);
+        const allowed = word.length >= 6 ? 2 : 1;
 
-        if (distance <= allowedDistance && distance < bestScore) {
-          bestScore = distance;
-        }
+        if (distance <= allowed) best = Math.min(best, distance);
       }
 
-      if (!Number.isFinite(bestScore)) {
-        allWordsMatched = false;
+      if (!Number.isFinite(best)) {
+        matchedAll = false;
         break;
       }
 
-      totalScore += bestScore;
+      score += best;
     }
 
-    if (allWordsMatched) ranked.push({ bike, score: totalScore });
+    if (matchedAll) ranked.push({ bike, score });
   }
 
   return ranked
     .sort((a, b) => a.score - b.score)
-    .slice(0, 10)
+    .slice(0, 8)
     .map((item) => item.bike);
 }
 
-function specifications(value?: number, unit = "") {
-  return value == null ? "Not available" : `${value}${unit}`;
-}
+const specifications = (value?: number, unit = "") =>
+  value == null ? "Not available" : `${value}${unit}`;
 
-/* -------------------------------------------------------
-   BIKE PHOTO GALLERY
-   Wikimedia Commons + Wikipedia image search.
-   Multiple images are displayed when available.
-------------------------------------------------------- */
+/* One main photo per bike. Commons first, Wikipedia fallback. */
 
 type Photo = {
   url: string;
   page: string;
   credit: string;
   license: string;
-  title: string;
-};
-
-type CommonsPage = {
-  title: string;
-  imageinfo?: Array<{
-    thumburl?: string;
-    url?: string;
-    descriptionurl?: string;
-    extmetadata?: Record<string, { value?: string }>;
-  }>;
 };
 
 function BikePhoto({ name }: { name: string }) {
-  const [photos, setPhotos] = useState<Photo[]>([]);
-  const [selected, setSelected] = useState(0);
+  const [photo, setPhoto] = useState<Photo | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -162,240 +142,186 @@ function BikePhoto({ name }: { name: string }) {
         .replace(/&amp;/g, "&")
         .replace(/&#039;/g, "'")
         .replace(/&quot;/g, '"')
-        .replace(/&#160;/g, " ")
         .trim();
 
-    const ignoredWords = new Set([
-      "royal", "enfield", "honda", "tvs", "bajaj",
-      "yamaha", "suzuki", "hero", "motorcycle",
-      "motorcycles", "motorbike", "bike", "india",
-      "the", "and",
-    ]);
-
-    const modelWords = normalize(name)
-      .split(" ")
-      .filter((word) => word.length > 1 && !ignoredWords.has(word));
-
-    async function loadPhotos() {
+    async function findPhoto() {
       setLoading(true);
-      setPhotos([]);
-      setSelected(0);
-
-      const found = new Map<string, Photo>();
+      setPhoto(null);
 
       try {
-        // Source 1: Wikimedia Commons.
-        // Try different search terms to improve photo discovery.
-        const queries = [
-          `"${name}" motorcycle`,
-          `"${name}"`,
-          `${name} bike`,
-          `${name} side view`,
-        ];
+        // Try Commons first, using the full model name.
+        const commonsParams = new URLSearchParams({
+          action: "query",
+          generator: "search",
+          gsrsearch: `filetype:bitmap "${name}"`,
+          gsrnamespace: "6",
+          gsrlimit: "25",
+          prop: "imageinfo",
+          iiprop: "url|extmetadata",
+          iiextmetadatafilter: "Artist|Credit|LicenseShortName",
+          iiurlwidth: "900",
+          format: "json",
+          origin: "*",
+        });
 
-        for (const query of queries) {
-          if (cancelled || found.size >= 8) break;
+        try {
+          const response = await fetch(
+            `https://commons.wikimedia.org/w/api.php?${commonsParams}`,
+            { signal: controller.signal }
+          );
 
-          const params = new URLSearchParams({
-            action: "query",
-            generator: "search",
-            gsrsearch: `filetype:bitmap ${query}`,
-            gsrnamespace: "6",
-            gsrlimit: "40",
-            prop: "imageinfo",
-            iiprop: "url|extmetadata",
-            iiextmetadatafilter: "Artist|Credit|LicenseShortName",
-            iiurlwidth: "1000",
-            format: "json",
-            origin: "*",
-          });
-
-          try {
-            const response = await fetch(
-              `https://commons.wikimedia.org/w/api.php?${params}`,
-              { signal: controller.signal }
-            );
-
-            if (!response.ok) continue;
-
+          if (response.ok) {
             const data = await response.json();
             const pages = Object.values(
               data.query?.pages ?? {}
-            ) as CommonsPage[];
+            ) as Array<{
+              title: string;
+              imageinfo?: Array<{
+                thumburl?: string;
+                url?: string;
+                descriptionurl?: string;
+                extmetadata?: Record<string, { value?: string }>;
+              }>;
+            }>;
 
-            const ranked = pages
+            const wanted = normalize(name);
+            const ignored = new Set([
+              "royal", "enfield", "honda", "tvs", "bajaj",
+              "yamaha", "suzuki", "hero", "motorcycle",
+              "motorcycles", "bike", "india", "the", "and",
+            ]);
+
+            const words = wanted
+              .split(" ")
+              .filter((word) => word.length > 1 && !ignored.has(word));
+
+            const candidates = pages
               .map((page) => {
                 const title = normalize(page.title);
                 const titleWords = title.split(" ");
-                const matched = modelWords.filter((word) =>
+                const matched = words.filter((word) =>
                   titleWords.includes(word)
                 ).length;
-
-                const exactPhrase = title.includes(normalize(name));
-                const info = page.imageinfo?.[0];
-                const url = info?.thumburl ?? info?.url;
 
                 return {
                   page,
                   matched,
-                  exactPhrase,
-                  url,
+                  exact: title.includes(wanted),
                 };
               })
-              .filter((item) => {
-                if (!item.url || modelWords.length === 0) return false;
+              .filter(({ page, matched, exact }) => {
+                const info = page.imageinfo?.[0];
+                const url = info?.thumburl ?? info?.url;
+                const required = Math.max(1, Math.ceil(words.length * 0.6));
 
-                // Require meaningful model-name overlap.
-                const requiredMatches = Math.max(
-                  1,
-                  Math.ceil(modelWords.length * 0.6)
-                );
-
-                return (
-                  item.exactPhrase ||
-                  item.matched >= requiredMatches
-                );
+                return Boolean(url) &&
+                  (exact || matched >= required);
               })
-              .sort((a, b) => {
-                if (a.exactPhrase !== b.exactPhrase) {
-                  return a.exactPhrase ? -1 : 1;
-                }
-                return b.matched - a.matched;
-              });
+              .sort((a, b) =>
+                Number(b.exact) - Number(a.exact) ||
+                b.matched - a.matched
+              );
 
-            for (const item of ranked) {
-              const info = item.page.imageinfo?.[0];
-              if (!info) continue;
+            const match = candidates[0]?.page;
+            const info = match?.imageinfo?.[0];
+            const url = info?.thumburl ?? info?.url;
 
-              const url = info.thumburl ?? info.url;
-              if (!url || found.has(url)) continue;
-
-              const metadata = info.extmetadata ?? {};
-
-              found.set(url, {
+            if (info && url && !cancelled) {
+              setPhoto({
                 url,
-                page:
-                  info.descriptionurl ??
+                page: info.descriptionurl ??
                   "https://commons.wikimedia.org/",
                 credit: clean(
-                  metadata.Artist?.value ?? metadata.Credit?.value
+                  info.extmetadata?.Artist?.value ??
+                  info.extmetadata?.Credit?.value
                 ),
-                license: clean(metadata.LicenseShortName?.value),
-                title: item.page.title,
+                license: clean(
+                  info.extmetadata?.LicenseShortName?.value
+                ),
               });
-
-              if (found.size >= 8) break;
-            }
-          } catch (error) {
-            if (
-              error instanceof Error &&
-              error.name === "AbortError"
-            ) {
               return;
             }
           }
+        } catch (error) {
+          if (
+            error instanceof Error &&
+            error.name === "AbortError"
+          ) return;
         }
 
-        // Source 2: Wikipedia article images.
-        // Search even when Commons has results, so both sources can
-        // contribute when the Wikipedia image is relevant.
-        if (!cancelled && found.size < 8) {
-          const params = new URLSearchParams({
-            action: "query",
-            generator: "search",
-            gsrsearch: name,
-            gsrnamespace: "0",
-            gsrlimit: "15",
-            prop: "pageimages|info",
-            piprop: "thumbnail",
-            pithumbsize: "1000",
-            inprop: "url",
-            format: "json",
-            origin: "*",
+        // Fallback source: Wikipedia.
+        if (cancelled) return;
+
+        const wikiParams = new URLSearchParams({
+          action: "query",
+          generator: "search",
+          gsrsearch: name,
+          gsrnamespace: "0",
+          gsrlimit: "12",
+          prop: "pageimages|info",
+          piprop: "thumbnail",
+          pithumbsize: "900",
+          inprop: "url",
+          format: "json",
+          origin: "*",
+        });
+
+        const response = await fetch(
+          `https://en.wikipedia.org/w/api.php?${wikiParams}`,
+          { signal: controller.signal }
+        );
+
+        if (!response.ok) return;
+
+        const data = await response.json();
+        const pages = Object.values(
+          data.query?.pages ?? {}
+        ) as Array<{
+          title: string;
+          thumbnail?: { source?: string };
+          fullurl?: string;
+        }>;
+
+        const words = normalize(name).split(" ").filter(Boolean);
+
+        const candidates = pages
+          .map((page) => {
+            const titleWords = normalize(page.title).split(" ");
+            const matched = words.filter((word) =>
+              titleWords.includes(word)
+            ).length;
+
+            return { page, matched };
+          })
+          .filter(({ page, matched }) =>
+            Boolean(page.thumbnail?.source) &&
+            matched >= Math.max(1, Math.ceil(words.length * 0.6))
+          )
+          .sort((a, b) => b.matched - a.matched);
+
+        const match = candidates[0]?.page;
+        const url = match?.thumbnail?.source;
+
+        if (match && url && !cancelled) {
+          setPhoto({
+            url,
+            page: match.fullurl ?? "https://en.wikipedia.org/",
+            credit: "Wikipedia image",
+            license: "Check source page for reuse terms",
           });
-
-          try {
-            const response = await fetch(
-              `https://en.wikipedia.org/w/api.php?${params}`,
-              { signal: controller.signal }
-            );
-
-            if (response.ok) {
-              const data = await response.json();
-
-              const pages = Object.values(
-                data.query?.pages ?? {}
-              ) as Array<{
-                title: string;
-                thumbnail?: { source?: string };
-                fullurl?: string;
-              }>;
-
-              const ranked = pages
-                .map((page) => {
-                  const titleWords = normalize(page.title).split(" ");
-                  const matched = modelWords.filter((word) =>
-                    titleWords.includes(word)
-                  ).length;
-
-                  return { page, matched };
-                })
-                .filter(({ page, matched }) => {
-                  if (!page.thumbnail?.source) return false;
-
-                  const requiredMatches = Math.max(
-                    1,
-                    Math.ceil(modelWords.length * 0.6)
-                  );
-
-                  return matched >= requiredMatches;
-                })
-                .sort((a, b) => b.matched - a.matched);
-
-              for (const item of ranked) {
-                const page = item.page;
-                const url = page.thumbnail?.source;
-                if (!url || found.has(url)) continue;
-
-                found.set(url, {
-                  url,
-                  page:
-                    page.fullurl ??
-                    "https://en.wikipedia.org/",
-                  credit: "Wikipedia article image",
-                  license: "Check source page for reuse terms",
-                  title: page.title,
-                });
-
-                if (found.size >= 8) break;
-              }
-            }
-          } catch (error) {
-            if (
-              error instanceof Error &&
-              error.name === "AbortError"
-            ) {
-              return;
-            }
-          }
-        }
-
-        if (!cancelled) {
-          setPhotos(Array.from(found.values()));
-          setSelected(0);
         }
       } catch (error) {
         if (
           !(error instanceof Error && error.name === "AbortError")
         ) {
-          console.error("Bike photo search error:", error);
+          console.error("Bike photo error:", error);
         }
       } finally {
         if (!cancelled) setLoading(false);
       }
     }
 
-    void loadPhotos();
+    void findPhoto();
 
     return () => {
       cancelled = true;
@@ -403,136 +329,53 @@ function BikePhoto({ name }: { name: string }) {
     };
   }, [name]);
 
-  const current = photos[selected];
-
-  const removeBrokenPhoto = (url: string) => {
-    setPhotos((old) => {
-      const updated = old.filter((photo) => photo.url !== url);
-      setSelected((index) => Math.min(index, Math.max(0, updated.length - 1)));
-      return updated;
-    });
-  };
-
   return (
     <div className="bike-photo">
-      {current ? (
+      {photo ? (
         <>
           <a
-            href={current.page}
+            href={photo.page}
             target="_blank"
             rel="noreferrer"
-            aria-label={`Open source for ${name} photo`}
+            aria-label={`Open photo source for ${name}`}
           >
             <img
-              src={current.url}
-              alt={`${name} - ${current.title}`}
+              className="bike-photo-image"
+              src={photo.url}
+              alt={name}
               loading="lazy"
-              onError={() => removeBrokenPhoto(current.url)}
-              style={{
-                display: "block",
-                width: "100%",
-                maxHeight: "360px",
-                objectFit: "contain",
-                borderRadius: "12px",
-              }}
+              onError={() => setPhoto(null)}
             />
           </a>
 
-          {photos.length > 1 && (
-            <div
-              className="bike-photo-gallery"
-              aria-label={`${name} photo gallery`}
-              style={{
-                display: "flex",
-                gap: "8px",
-                overflowX: "auto",
-                padding: "10px 0",
-              }}
-            >
-              {photos.map((photo, index) => (
-                <button
-                  type="button"
-                  key={photo.url}
-                  onClick={() => setSelected(index)}
-                  aria-label={`Show photo ${index + 1}`}
-                  aria-pressed={selected === index}
-                  style={{
-                    flex: "0 0 76px",
-                    padding: "3px",
-                    borderRadius: "8px",
-                    border:
-                      selected === index
-                        ? "2px solid #2563eb"
-                        : "1px solid #cbd5e1",
-                    background: "transparent",
-                  }}
-                >
-                  <img
-                    src={photo.url}
-                    alt={`${name} thumbnail ${index + 1}`}
-                    loading="lazy"
-                    onError={() => removeBrokenPhoto(photo.url)}
-                    style={{
-                      display: "block",
-                      width: "68px",
-                      height: "56px",
-                      objectFit: "cover",
-                      borderRadius: "5px",
-                    }}
-                  />
-                </button>
-              ))}
-            </div>
-          )}
-
-          <a
-            className="photo-credit"
-            href={current.page}
-            target="_blank"
-            rel="noreferrer"
-          >
-            {current.credit || "View photo source"}
-            {current.license ? ` · ${current.license}` : ""}
-          </a>
-
-          <small className="muted">
-            Photo {selected + 1} of {photos.length}
+          <small className="photo-credit">
+            <a href={photo.page} target="_blank" rel="noreferrer">
+              {photo.credit || "View photo source"}
+              {photo.license ? ` · ${photo.license}` : ""}
+            </a>
           </small>
         </>
       ) : (
         <div className="bike-photo-placeholder">
-          <span>🏍️</span>
+          <span className="bike-photo-icon">🏍️</span>
           <small>
-            {loading ? "Searching photo sources..." : "No matching photo found"}
+            {loading ? "Finding bike photo..." : "Photo unavailable"}
           </small>
 
           {!loading && (
-            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-              <a
-                href={`https://commons.wikimedia.org/wiki/Special:MediaSearch?type=image&search=${encodeURIComponent(name + " motorcycle")}`}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Search Wikimedia photos
-              </a>
-              <a
-                href={`https://en.wikipedia.org/w/index.php?search=${encodeURIComponent(name)}`}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Search Wikipedia
-              </a>
-            </div>
+            <a
+              href={`https://commons.wikimedia.org/wiki/Special:MediaSearch?type=image&search=${encodeURIComponent(name + " motorcycle")}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Search photos
+            </a>
           )}
         </div>
       )}
     </div>
   );
 }
-
-/* -------------------------------------------------------
-   MAIN APP
-------------------------------------------------------- */
 
 function App() {
   const [theme, setTheme] = useState<"light" | "dark">(() => {
@@ -546,17 +389,6 @@ function App() {
   });
 
   const [settingsOpen, setSettingsOpen] = useState(false);
-
-  useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-
-    try {
-      localStorage.setItem("bike-app-theme", theme);
-    } catch {
-      // Theme still works during this session if storage is unavailable.
-    }
-  }, [theme]);
-
   const [bikes, setBikes] = useState<Bike[]>(sampleBikes);
   const [dbLoading, setDbLoading] = useState(true);
   const [dbMessage, setDbMessage] = useState("Loading bike catalogue...");
@@ -570,6 +402,7 @@ function App() {
   const [sending, setSending] = useState(false);
 
   const [search, setSearch] = useState("");
+  const [searchMessage, setSearchMessage] = useState("");
   const [first, setFirst] = useState(sampleBikes[0].name);
   const [second, setSecond] = useState(sampleBikes[1].name);
   const [petrol, setPetrol] = useState("106");
@@ -579,9 +412,14 @@ function App() {
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
+
+    try {
+      localStorage.setItem("bike-app-theme", theme);
+    } catch {
+      // Continue using the selected theme for this session.
+    }
   }, [theme]);
 
-  // Load online bike-name catalogue.
   useEffect(() => {
     const controller = new AbortController();
 
@@ -594,7 +432,7 @@ function App() {
 
         if (!response.ok) throw new Error("Catalogue request failed");
 
-        const data = (await response.json()) as {
+        const data = await response.json() as {
           makes?: Array<{
             name?: string;
             models?: Array<{ name?: string; kind?: string }>;
@@ -611,9 +449,7 @@ function App() {
             if (
               !model.name ||
               !["motorcycle", "moped"].includes(model.kind ?? "")
-            ) {
-              continue;
-            }
+            ) continue;
 
             const makeName = make.name?.trim() ?? "";
             const modelName = model.name.trim();
@@ -626,8 +462,9 @@ function App() {
                   ? `${makeName} ${modelName}`
                   : modelName;
 
-            const key = normalize(name);
-            if (!unique.has(key)) unique.set(key, { name });
+            if (name.trim() && !unique.has(normalize(name))) {
+              unique.set(normalize(name), { name });
+            }
           }
         }
 
@@ -643,10 +480,8 @@ function App() {
         }
       } catch (error) {
         if (!controller.signal.aborted) {
-          console.error("Bike database error:", error);
-          setDbMessage(
-            "Online catalogue load aayilla. Sample bikes available aanu."
-          );
+          console.error("Bike catalogue error:", error);
+          setDbMessage("Online catalogue unavailable. Sample bikes are ready.");
         }
       } finally {
         if (!controller.signal.aborted) setDbLoading(false);
@@ -657,28 +492,75 @@ function App() {
     return () => controller.abort();
   }, []);
 
-  // Firebase authentication status.
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(
+    return onAuthStateChanged(
       auth,
       (currentUser) => {
         setUser(currentUser);
         setAuthLoading(false);
       },
       (error) => {
-        console.error("Authentication state error:", error);
+        console.error("Auth state error:", error);
         setMessage("Login status load cheyyaan pattiyilla.");
         setAuthLoading(false);
       }
     );
-
-    return unsubscribe;
   }, []);
 
-  const handleAuth = async (
-    event: React.FormEvent<HTMLFormElement>
-  ) => {
+  const suggestions = useMemo(
+    () => getBikeSuggestions(search, bikes),
+    [search, bikes]
+  );
+
+  const bikeA = bikes.find((bike) => bike.name === first) ?? bikes[0];
+  const bikeB = bikes.find((bike) => bike.name === second) ?? bikes[1] ?? bikes[0];
+
+  const price = Math.max(0, Number(petrol) || 0);
+  const km = Math.max(0, Number(dailyKm) || 0);
+  const numberOfDays = Math.max(0, Number(days) || 0);
+  const totalKm = km * numberOfDays;
+
+  const costFor = (bike: Bike): number | null =>
+    bike.mileage != null && bike.mileage > 0
+      ? (totalKm / bike.mileage) * price
+      : null;
+
+  function runSearch(event?: React.FormEvent<HTMLFormElement>) {
+    event?.preventDefault();
+
+    const query = search.trim();
+
+    if (!query) {
+      setSearchMessage("Bike name type cheythu Search amarthu.");
+      return;
+    }
+
+    const results = getBikeSuggestions(query, bikes);
+
+    if (!results.length) {
+      setSearchMessage(
+        "Matching bike kandethiyilla. Spelling check cheythu veendum try cheyyu."
+      );
+      return;
+    }
+
+    const exact = bikes.find(
+      (bike) => normalize(bike.name) === normalize(query)
+    );
+    const selected = exact ?? results[0];
+
+    setFirst(selected.name);
+    setSearch(selected.name);
+    setSearchMessage(
+      exact
+        ? "Bike found."
+        : `Closest match: ${selected.name}`
+    );
+  }
+
+  async function handleAuth(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
     const cleanEmail = email.trim();
 
     if (!cleanEmail || !password) {
@@ -709,34 +591,24 @@ function App() {
           : "";
 
       const errors: Record<string, string> = {
-        "auth/email-already-in-use":
-          "Ee email-inu account already undu. Login cheyyu.",
+        "auth/email-already-in-use": "Ee email-inu account already undu. Login cheyyu.",
         "auth/invalid-email": "Valid email address enter cheyyu.",
         "auth/weak-password": "Password minimum 6 characters venam.",
-        "auth/invalid-credential":
-          "Email allenkil password correct alla.",
-        "auth/wrong-password":
-          "Email allenkil password correct alla.",
-        "auth/user-not-found":
-          "Email allenkil password correct alla.",
-        "auth/too-many-requests":
-          "Kurachu kazhinju veendum try cheyyu.",
-        "auth/network-request-failed":
-          "Internet connection check cheyyu.",
-        "auth/operation-not-allowed":
-          "Firebase-il Email/Password sign-in enable cheyyanam.",
+        "auth/invalid-credential": "Email allenkil password correct alla.",
+        "auth/wrong-password": "Email allenkil password correct alla.",
+        "auth/user-not-found": "Email allenkil password correct alla.",
+        "auth/too-many-requests": "Kurachu kazhinju veendum try cheyyu.",
+        "auth/network-request-failed": "Internet connection check cheyyu.",
+        "auth/operation-not-allowed": "Firebase-il Email/Password sign-in enable cheyyanam.",
       };
 
-      setMessage(
-        errors[code] ??
-          "Authentication failed. Firebase settings check cheyyu."
-      );
+      setMessage(errors[code] ?? "Authentication failed. Firebase settings check cheyyu.");
     } finally {
       setSending(false);
     }
-  };
+  }
 
-  const handleLogout = async () => {
+  async function handleLogout() {
     try {
       await signOut(auth);
       setPassword("");
@@ -747,85 +619,49 @@ function App() {
       console.error(error);
       setMessage("Logout cheyyaan pattiyilla. Veendum try cheyyu.");
     }
-  };
+  }
 
-  const bikeA = bikes.find((bike) => bike.name === first) ?? bikes[0];
-  const bikeB =
-    bikes.find((bike) => bike.name === second) ?? bikes[1] ?? bikes[0];
-
-  const suggestions = useMemo(
-    () => getBikeSuggestions(search, bikes),
-    [bikes, search]
-  );
-
-  const price = Math.max(0, Number(petrol) || 0);
-  const km = Math.max(0, Number(dailyKm) || 0);
-  const numberOfDays = Math.max(0, Number(days) || 0);
-  const totalKm = km * numberOfDays;
-
-  const costFor = (bike: Bike): number | null =>
-    bike.mileage != null && bike.mileage > 0
-      ? (totalKm / bike.mileage) * price
-      : null;
-
-  const SettingsButton = () => (
-    <section className="settings-panel">
-      <button
-        className="secondary settings-button"
-        type="button"
-        aria-expanded={settingsOpen}
-        onClick={() => setSettingsOpen((open) => !open)}
-      >
-        ⚙️ Settings
-        <span>{settingsOpen ? " ▲" : " ▼"}</span>
-      </button>
-
-      {settingsOpen && (
-        <div className="settings-content">
-          <h3>Appearance</h3>
-          <p className="muted">Choose your preferred app theme.</p>
-
-          <div className="theme-options">
-            <button
-              type="button"
-              className={
-                theme === "light"
-                  ? "theme-choice theme-selected"
-                  : "theme-choice"
-              }
-              aria-pressed={theme === "light"}
-              onClick={() => setTheme("light")}
-            >
-              ☀️ Light Mode {theme === "light" ? " ✓" : ""}
-            </button>
-
-            <button
-              type="button"
-              className={
-                theme === "dark"
-                  ? "theme-choice theme-selected"
-                  : "theme-choice"
-              }
-              aria-pressed={theme === "dark"}
-              onClick={() => setTheme("dark")}
-            >
-              🌙 Dark Mode {theme === "dark" ? " ✓" : ""}
-            </button>
-          </div>
-        </div>
-      )}
-    </section>
-  );
-
-  if (authLoading) {
+  function SettingsButton() {
     return (
-      <main className="app">
-        <section className="panel">Loading...</section>
-      </main>
+      <section className="settings-panel">
+        <button
+          className="secondary settings-button"
+          type="button"
+          aria-expanded={settingsOpen}
+          onClick={() => setSettingsOpen((open) => !open)}
+        >
+          ⚙️ Settings <span>{settingsOpen ? "▲" : "▼"}</span>
+        </button>
+
+        {settingsOpen && (
+          <div className="settings-content">
+            <h3>Appearance</h3>
+            <div className="theme-options">
+              <button
+                type="button"
+                className={theme === "light" ? "theme-choice theme-selected" : "theme-choice"}
+                onClick={() => setTheme("light")}
+              >
+                ☀️ Light Mode
+              </button>
+              <button
+                type="button"
+                className={theme === "dark" ? "theme-choice theme-selected" : "theme-choice"}
+                onClick={() => setTheme("dark")}
+              >
+                🌙 Dark Mode
+              </button>
+            </div>
+          </div>
+        )}
+      </section>
     );
   }
 
-  // Login / signup screen.
+  if (authLoading) {
+    return <main className="app"><section className="panel">Loading...</section></main>;
+  }
+
   if (!user) {
     return (
       <main className="app">
@@ -840,15 +676,8 @@ function App() {
         <SettingsButton />
 
         <section className="panel">
-          <h2>
-            🔐 {authMode === "login" ? "Welcome Back" : "Create Account"}
-          </h2>
-
-          <p>
-            {authMode === "login"
-              ? "Emailum passwordum use cheythu login cheyyu."
-              : "Puthiya account create cheyyuka."}
-          </p>
+          <h2>🔐 {authMode === "login" ? "Welcome Back" : "Create Account"}</h2>
+          <p>{authMode === "login" ? "Emailum passwordum use cheythu login cheyyu." : "Puthiya account create cheyyuka."}</p>
 
           <form onSubmit={handleAuth}>
             <label htmlFor="loginEmail">Email address</label>
@@ -866,11 +695,7 @@ function App() {
             <input
               id="loginPassword"
               type="password"
-              autoComplete={
-                authMode === "login"
-                  ? "current-password"
-                  : "new-password"
-              }
+              autoComplete={authMode === "login" ? "current-password" : "new-password"}
               placeholder="Minimum 6 characters"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -878,24 +703,10 @@ function App() {
               required
             />
 
-            <button
-              className="primary"
-              type="submit"
-              disabled={sending}
-            >
-              {sending
-                ? "Please wait..."
-                : authMode === "login"
-                  ? "Login"
-                  : "Create Account"}
+            <button className="primary" type="submit" disabled={sending}>
+              {sending ? "Please wait..." : authMode === "login" ? "Login" : "Create Account"}
             </button>
           </form>
-
-          <p className="muted">
-            {authMode === "login"
-              ? "Account illenkil Create Account select cheyyu."
-              : "Account already undenkil Login select cheyyu."}
-          </p>
 
           <button
             className="secondary"
@@ -906,14 +717,10 @@ function App() {
               setMessage("");
             }}
           >
-            {authMode === "login"
-              ? "Create New Account"
-              : "Already have an account? Login"}
+            {authMode === "login" ? "Create New Account" : "Already have an account? Login"}
           </button>
 
-          {message && (
-            <p role="status" className="muted">{message}</p>
-          )}
+          {message && <p role="status" className="muted">{message}</p>}
         </section>
 
         <footer>Created by Nidhin ❤️</footer>
@@ -921,7 +728,6 @@ function App() {
     );
   }
 
-  // Main app.
   return (
     <main className="app">
       <header>
@@ -937,100 +743,68 @@ function App() {
       <section className="account-panel">
         <details>
           <summary>👤 Account</summary>
-          <p>
-            Logged in as <strong>{user.email}</strong>
-          </p>
-          <button
-            className="secondary"
-            type="button"
-            onClick={handleLogout}
-          >
-            Log out
-          </button>
-          {message && (
-            <p role="status" className="muted">{message}</p>
-          )}
+          <p>Logged in as <strong>{user.email}</strong></p>
+          <button className="secondary" type="button" onClick={handleLogout}>Log out</button>
+          {message && <p role="status" className="muted">{message}</p>}
         </details>
       </section>
 
       <nav className="nav">
-        <button
-          className={tab === "search" ? "nav-active" : ""}
-          onClick={() => setTab("search")}
-        >
-          Bike Search
-        </button>
-
-        <button
-          className={tab === "compare" ? "nav-active" : ""}
-          onClick={() => setTab("compare")}
-        >
-          Bike Comparison
-        </button>
-
-        <button
-          className={tab === "petrol" ? "nav-active" : ""}
-          onClick={() => setTab("petrol")}
-        >
-          Petrol Comparison
-        </button>
+        <button className={tab === "search" ? "nav-active" : ""} onClick={() => setTab("search")}>Bike Search</button>
+        <button className={tab === "compare" ? "nav-active" : ""} onClick={() => setTab("compare")}>Bike Comparison</button>
+        <button className={tab === "petrol" ? "nav-active" : ""} onClick={() => setTab("petrol")}>Petrol Comparison</button>
       </nav>
 
       {tab === "search" && (
         <>
           <section className="panel">
             <h2>🔎 Find a bike</h2>
+            <p className="muted">{dbLoading ? "Loading online bike catalogue..." : dbMessage}</p>
+
+            <form onSubmit={runSearch}>
+              <label htmlFor="bikeSearch">Bike name</label>
+              <input
+                id="bikeSearch"
+                type="search"
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setSearchMessage("");
+                }}
+                placeholder="Type bike name, e.g. Honda SP 125"
+                autoComplete="off"
+                spellCheck={false}
+              />
+
+              <button className="primary" type="submit">🔍 Search bike</button>
+            </form>
 
             <p className="muted">
-              {dbLoading
-                ? "Loading online bike catalogue..."
-                : dbMessage}
+              Enter key അമർത്തിയും search ചെയ്യാം. Suggestions optional ആണ്.
             </p>
 
-            <label htmlFor="bikeSearch">Bike name</label>
-            <input
-              id="bikeSearch"
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Type bike name or spelling..."
-              autoComplete="off"
-              spellCheck={false}
-            />
+            {searchMessage && <p role="status" className="muted">{searchMessage}</p>}
 
-            <p className="muted">
-              Tip: Bullet, Pulsar, Honda SP 125, or even a small spelling
-              mistake try cheyyu.
-            </p>
-
-            <div className="suggestions">
-              {suggestions.map((bike) => (
-                <div className="suggestion-item" key={bike.name}>
-                  <BikePhoto name={bike.name} />
-
+            {search.trim() && suggestions.length > 0 && (
+              <div className="suggestions">
+                <p className="muted">Suggestions — tap to select:</p>
+                {suggestions.map((bike) => (
                   <button
                     type="button"
                     className="suggestion"
+                    key={bike.name}
                     onClick={() => {
                       setFirst(bike.name);
                       setSearch(bike.name);
-                      setTab("compare");
+                      setSearchMessage("Bike selected.");
                     }}
                   >
                     <span>{bike.name}</span>
-                    <small>
-                      {specifications(bike.mileage, " km/L")}
-                    </small>
+                    <small>{specifications(bike.mileage, " km/L")}</small>
                   </button>
-                </div>
-              ))}
-
-              {!suggestions.length && (
-                <p className="muted">
-                  Match kandethiyilla. Kurachu different spelling try cheyyu.
-                </p>
-              )}
-            </div>
+                ))}
+              </div>
+            )}
           </section>
 
           <section className="panel">
@@ -1039,30 +813,16 @@ function App() {
             <h3>{bikeA.name}</h3>
 
             <div className="stats">
-              <div>
-                <span>Estimated mileage</span>
-                <strong>{specifications(bikeA.mileage, " km/L")}</strong>
-              </div>
-
-              <div>
-                <span>Fuel tank</span>
-                <strong>{specifications(bikeA.tank, " L")}</strong>
-              </div>
-
-              <div>
-                <span>Indicative price</span>
-                <strong>
-                  {bikeA.price == null
-                    ? "Not available"
-                    : `${money(bikeA.price)}*`}
-                </strong>
-              </div>
+              <div><span>Estimated mileage</span><strong>{specifications(bikeA.mileage, " km/L")}</strong></div>
+              <div><span>Fuel tank</span><strong>{specifications(bikeA.tank, " L")}</strong></div>
+              <div><span>Indicative price</span><strong>{bikeA.price == null ? "Not available" : `${money(bikeA.price)}*`}</strong></div>
             </div>
 
-            <p className="muted">
-              *Existing 16-bike specifications are sample estimates,
-              not verified current prices.
-            </p>
+            <button className="secondary" type="button" onClick={() => setTab("compare")}>
+              Compare this bike
+            </button>
+
+            <p className="muted">*Sample estimates only; not verified current dealer prices.</p>
           </section>
         </>
       )}
@@ -1072,75 +832,29 @@ function App() {
           <h2>🏁 Bike comparison</h2>
 
           <label htmlFor="bikeA">First bike</label>
-          <select
-            id="bikeA"
-            value={first}
-            onChange={(e) => setFirst(e.target.value)}
-          >
-            {bikes.map((bike) => (
-              <option key={bike.name} value={bike.name}>
-                {bike.name}
-              </option>
-            ))}
+          <select id="bikeA" value={first} onChange={(e) => setFirst(e.target.value)}>
+            {bikes.map((bike) => <option key={bike.name} value={bike.name}>{bike.name}</option>)}
           </select>
 
           <label htmlFor="bikeB">Second bike</label>
-          <select
-            id="bikeB"
-            value={second}
-            onChange={(e) => setSecond(e.target.value)}
-          >
-            {bikes.map((bike) => (
-              <option key={bike.name} value={bike.name}>
-                {bike.name}
-              </option>
-            ))}
+          <select id="bikeB" value={second} onChange={(e) => setSecond(e.target.value)}>
+            {bikes.map((bike) => <option key={bike.name} value={bike.name}>{bike.name}</option>)}
           </select>
 
           <div className="compare-grid">
             {[bikeA, bikeB].map((bike, index) => (
-              <div
-                className="compare-card"
-                key={`${bike.name}-${index}`}
-              >
+              <div className="compare-card" key={`${bike.name}-${index}`}>
                 <BikePhoto name={bike.name} />
                 <h3>{bike.name}</h3>
-
-                <p>
-                  <span>Estimated mileage</span>
-                  <strong>{specifications(bike.mileage, " km/L")}</strong>
-                </p>
-
-                <p>
-                  <span>Fuel tank</span>
-                  <strong>{specifications(bike.tank, " L")}</strong>
-                </p>
-
-                <p>
-                  <span>Indicative price</span>
-                  <strong>
-                    {bike.price == null
-                      ? "Not available"
-                      : `${money(bike.price)}*`}
-                  </strong>
-                </p>
-
-                <p>
-                  <span>Fuel cost per km</span>
-                  <strong>
-                    {bike.mileage == null || bike.mileage <= 0
-                      ? "Not available"
-                      : money(price / bike.mileage)}
-                  </strong>
-                </p>
+                <p><span>Estimated mileage</span><strong>{specifications(bike.mileage, " km/L")}</strong></p>
+                <p><span>Fuel tank</span><strong>{specifications(bike.tank, " L")}</strong></p>
+                <p><span>Indicative price</span><strong>{bike.price == null ? "Not available" : `${money(bike.price)}*`}</strong></p>
+                <p><span>Fuel cost per km</span><strong>{bike.mileage == null || bike.mileage <= 0 ? "Not available" : money(price / bike.mileage)}</strong></p>
               </div>
             ))}
           </div>
 
-          <p className="muted">
-            Catalogue model names are not proof of current Indian
-            availability. Confirm model year and dealer specifications.
-          </p>
+          <p className="muted">Online catalogue provides model names, not verified specifications.</p>
         </section>
       )}
 
@@ -1149,75 +863,27 @@ function App() {
           <h2>⛽ Petrol cost comparison</h2>
 
           <label htmlFor="petrol">Petrol price (₹/litre)</label>
-          <input
-            id="petrol"
-            type="number"
-            min="0"
-            step="0.01"
-            value={petrol}
-            onChange={(e) => setPetrol(e.target.value)}
-          />
+          <input id="petrol" type="number" min="0" step="0.01" value={petrol} onChange={(e) => setPetrol(e.target.value)} />
 
-          <p className="muted">
-            Current petrol rate manually enter cheyyuka. Live feed alla.
-          </p>
+          <p className="muted">Petrol price manually enter cheyyuka. This is not a live rate feed.</p>
 
           <label htmlFor="dailyKm">Daily distance (km)</label>
-          <input
-            id="dailyKm"
-            type="number"
-            min="0"
-            step="0.1"
-            value={dailyKm}
-            onChange={(e) => setDailyKm(e.target.value)}
-          />
+          <input id="dailyKm" type="number" min="0" step="0.1" value={dailyKm} onChange={(e) => setDailyKm(e.target.value)} />
 
           <label htmlFor="days">Number of days</label>
-          <input
-            id="days"
-            type="number"
-            min="0"
-            step="1"
-            value={days}
-            onChange={(e) => setDays(e.target.value)}
-          />
+          <input id="days" type="number" min="0" step="1" value={days} onChange={(e) => setDays(e.target.value)} />
 
           <div className="compare-grid">
             {[bikeA, bikeB].map((bike, index) => {
               const cost = costFor(bike);
 
               return (
-                <div
-                  className="compare-card"
-                  key={`${bike.name}-${index}`}
-                >
+                <div className="compare-card" key={`${bike.name}-${index}`}>
                   <BikePhoto name={bike.name} />
                   <h3>{bike.name}</h3>
-
-                  <p>
-                    <span>Estimated total fuel cost</span>
-                    <strong>
-                      {cost == null ? "Not available" : money(cost)}
-                    </strong>
-                  </p>
-
-                  <p>
-                    <span>Estimated fuel required</span>
-                    <strong>
-                      {bike.mileage == null || bike.mileage <= 0
-                        ? "Not available"
-                        : `${(totalKm / bike.mileage).toFixed(2)} L`}
-                    </strong>
-                  </p>
-
-                  <p>
-                    <span>Daily cost</span>
-                    <strong>
-                      {bike.mileage == null || bike.mileage <= 0
-                        ? "Not available"
-                        : money((km / bike.mileage) * price)}
-                    </strong>
-                  </p>
+                  <p><span>Estimated total fuel cost</span><strong>{cost == null ? "Not available" : money(cost)}</strong></p>
+                  <p><span>Estimated fuel required</span><strong>{bike.mileage == null || bike.mileage <= 0 ? "Not available" : `${(totalKm / bike.mileage).toFixed(2)} L`}</strong></p>
+                  <p><span>Daily cost</span><strong>{bike.mileage == null || bike.mileage <= 0 ? "Not available" : money((km / bike.mileage) * price)}</strong></p>
                 </div>
               );
             })}
@@ -1225,19 +891,14 @@ function App() {
 
           <div className="result">
             <span>Estimated difference over {numberOfDays} days</span>
-
             <strong>
               {costFor(bikeA) == null || costFor(bikeB) == null
                 ? "Not available"
                 : money(Math.abs(costFor(bikeA)! - costFor(bikeB)!))}
             </strong>
-
             <p>
-              {bikeA.mileage == null ||
-              bikeB.mileage == null ||
-              bikeA.mileage <= 0 ||
-              bikeB.mileage <= 0
-                ? "Accurate comparison-inu randu bikes-inte mileage data venam."
+              {bikeA.mileage == null || bikeB.mileage == null || bikeA.mileage <= 0 || bikeB.mileage <= 0
+                ? "Comparison-inu randu bikes-inte mileage data venam."
                 : bikeA.mileage === bikeB.mileage
                   ? "Both bikes have the same listed mileage."
                   : `${bikeA.mileage > bikeB.mileage ? bikeA.name : bikeB.name} has the higher listed mileage.`}
@@ -1248,22 +909,9 @@ function App() {
 
       <footer>
         Bike model catalogue:{" "}
-        <a
-          href="https://vehiclesdb.com"
-          target="_blank"
-          rel="noreferrer"
-        >
-          VehiclesDB
-        </a>
-        {" "}· CC BY 4.0.
-
-        <p>
-          Catalogue provides model names, not verified prices or specifications.
-        </p>
-
-        Photos load from Wikimedia Commons and Wikipedia when relevant
-        images are available.
-
+        <a href="https://vehiclesdb.com" target="_blank" rel="noreferrer">VehiclesDB</a>.
+        <p>Catalogue model names are not verified prices or specifications.</p>
+        <p>Photos are sourced from Wikimedia Commons or Wikipedia when available.</p>
         <p>Created by Nidhin ❤️</p>
       </footer>
     </main>
