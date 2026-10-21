@@ -1,26 +1,26 @@
-
 {
-  "name": "bike-cost-compare",
-  "private": true,
-  "version": "1.0.0",
-  "type": "module",
-  "scripts": {
-    "dev": "vite --host 0.0.0.0",
-    "build": "vite build",
-    "preview": "vite preview"
-  },
-  "dependencies": {
-    "@capacitor/android": "^7.4.3",
-    "@capacitor/core": "^7.4.3",
-    "@tailwindcss/vite": "^4.3.3",
-    "@vitejs/plugin-react": "^6.1.1",
-    "react": "^19.0.1",
-    "react-dom": "^19.0.1",
-    "tailwindcss": "^4.3.3",
-    "vite": "^8.3.5"
-  },
-  "devDependencies": {
-    "@capacitor/cli": "^7.4.3",
-    "typescript": "^5.8.3"
-  }
+"name": "bike-cost-compare",
+"private": true,
+"version": "1.0.0",
+"type": "module",
+"scripts": {
+"dev": "vite --host 0.0.0.0",
+"build": "vite build",
+"preview": "vite preview"
+},
+"dependencies": {
+"@capacitor/android": "^7.4.3",
+"@capacitor/core": "^7.4.3",
+"@tailwindcss/vite": "^4.3.3",
+"@vitejs/plugin-react": "^6.1.1",
+"firebase": "^12.5.0",
+"react": "^19.0.1",
+"react-dom": "^19.0.1",
+"tailwindcss": "^4.3.3",
+"vite": "^8.3.5"
+},
+"devDependencies": {
+"@capacitor/cli": "^7.4.3",
+"typescript": "^5.8.3"
+}
 }
