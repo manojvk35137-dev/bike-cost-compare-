@@ -38,7 +38,8 @@ const bikes: Bike[] = [
 ];
 
 const money = (value: number) =>
-  "₹" + value.toLocaleString("en-IN", {
+  "₹" +
+  value.toLocaleString("en-IN", {
     maximumFractionDigits: 2,
   });
 
@@ -125,49 +126,30 @@ function App() {
 
       switch (code) {
         case "auth/email-already-in-use":
-          setMessage(
-            "Ee email-inu account already undu. Login cheyyu."
-          );
+          setMessage("Ee email-inu account already undu. Login cheyyu.");
           break;
-
         case "auth/invalid-email":
           setMessage("Valid email address enter cheyyu.");
           break;
-
         case "auth/weak-password":
-          setMessage(
-            "Password weak aanu. Minimum 6 characters use cheyyu."
-          );
+          setMessage("Password weak aanu. Minimum 6 characters use cheyyu.");
           break;
-
         case "auth/invalid-credential":
         case "auth/wrong-password":
         case "auth/user-not-found":
-          setMessage(
-            "Email allenkil password correct alla. Veendum check cheyyu."
-          );
+          setMessage("Email allenkil password correct alla. Veendum check cheyyu.");
           break;
-
         case "auth/too-many-requests":
-          setMessage(
-            "Valare adhikam attempts undayi. Kurachu kazhinju try cheyyu."
-          );
+          setMessage("Valare adhikam attempts undayi. Kurachu kazhinju try cheyyu.");
           break;
-
         case "auth/network-request-failed":
           setMessage("Internet connection check cheythu retry cheyyu.");
           break;
-
         case "auth/operation-not-allowed":
-          setMessage(
-            "Firebase Console-il Email/Password sign-in enable cheyyanam."
-          );
+          setMessage("Firebase Console-il Email/Password sign-in enable cheyyanam.");
           break;
-
         default:
-          setMessage(
-            "Authentication failed. Firebase settings check cheyyu."
-          );
+          setMessage("Authentication failed. Firebase settings check cheyyu.");
       }
     } finally {
       setSending(false);
@@ -255,9 +237,7 @@ function App() {
               id="loginPassword"
               type="password"
               autoComplete={
-                authMode === "login"
-                  ? "current-password"
-                  : "new-password"
+                authMode === "login" ? "current-password" : "new-password"
               }
               placeholder="Minimum 6 characters"
               value={password}
@@ -266,11 +246,7 @@ function App() {
               required
             />
 
-            <button
-              className="primary"
-              type="submit"
-              disabled={sending}
-            >
+            <button className="primary" type="submit" disabled={sending}>
               {sending
                 ? "Please wait..."
                 : authMode === "login"
@@ -290,9 +266,7 @@ function App() {
             type="button"
             disabled={sending}
             onClick={() => {
-              setAuthMode(
-                authMode === "login" ? "signup" : "login"
-              );
+              setAuthMode(authMode === "login" ? "signup" : "login");
               setMessage("");
             }}
           >
@@ -323,19 +297,21 @@ function App() {
         </div>
       </header>
 
-      <section className="panel">
-        <p>
-          Logged in as <strong>{user.email}</strong>
-        </p>
-        <button
-          className="secondary"
-          onClick={handleLogout}
-        >
-          Log out
-        </button>
-        {message && (
-          <p role="status" className="muted">{message}</p>
-        )}
+      <section className="account-panel">
+        <details>
+          <summary>👤 Account</summary>
+          <p>
+            Logged in as <strong>{user.email}</strong>
+          </p>
+          <button className="secondary" onClick={handleLogout}>
+            Log out
+          </button>
+          {message && (
+            <p role="status" className="muted">
+              {message}
+            </p>
+          )}
+        </details>
       </section>
 
       <nav className="nav">
@@ -343,19 +319,19 @@ function App() {
           className={tab === "search" ? "nav-active" : ""}
           onClick={() => setTab("search")}
         >
-          Bike search
+          Bike Search
         </button>
         <button
           className={tab === "compare" ? "nav-active" : ""}
           onClick={() => setTab("compare")}
         >
-          Bike comparison
+          Bike Comparison
         </button>
         <button
           className={tab === "petrol" ? "nav-active" : ""}
           onClick={() => setTab("petrol")}
         >
-          Petrol comparison
+          Petrol Comparison
         </button>
       </nav>
 
@@ -375,6 +351,7 @@ function App() {
             <div className="suggestions">
               {suggestions.map((bike) => (
                 <button
+                  type="button"
                   className="suggestion"
                   key={bike.name}
                   onClick={() => {
@@ -431,7 +408,9 @@ function App() {
             onChange={(e) => setFirst(e.target.value)}
           >
             {bikes.map((b) => (
-              <option key={b.name} value={b.name}>{b.name}</option>
+              <option key={b.name} value={b.name}>
+                {b.name}
+              </option>
             ))}
           </select>
 
@@ -442,13 +421,15 @@ function App() {
             onChange={(e) => setSecond(e.target.value)}
           >
             {bikes.map((b) => (
-              <option key={b.name} value={b.name}>{b.name}</option>
+              <option key={b.name} value={b.name}>
+                {b.name}
+              </option>
             ))}
           </select>
 
           <div className="compare-grid">
-            {[bikeA, bikeB].map((bike) => (
-              <div className="compare-card" key={bike.name}>
+            {[bikeA, bikeB].map((bike, index) => (
+              <div className="compare-card" key={`${bike.name}-${index}`}>
                 <h3>{bike.name}</h3>
                 <p>
                   <span>Estimated mileage</span>
@@ -498,6 +479,7 @@ function App() {
             id="dailyKm"
             type="number"
             min="0"
+            step="0.1"
             value={dailyKm}
             onChange={(e) => setDailyKm(e.target.value)}
           />
@@ -507,13 +489,14 @@ function App() {
             id="days"
             type="number"
             min="0"
+            step="1"
             value={days}
             onChange={(e) => setDays(e.target.value)}
           />
 
           <div className="compare-grid">
-            {[bikeA, bikeB].map((bike) => (
-              <div className="compare-card" key={bike.name}>
+            {[bikeA, bikeB].map((bike, index) => (
+              <div className="compare-card" key={`${bike.name}-${index}`}>
                 <h3>{bike.name}</h3>
                 <p>
                   <span>Estimated total fuel cost</span>
@@ -532,15 +515,14 @@ function App() {
           </div>
 
           <div className="result">
-            <span>Estimated savings over {numberOfDays} days</span>
+            <span>Estimated difference over {numberOfDays} days</span>
             <strong>
               {money(Math.abs(costFor(bikeA) - costFor(bikeB)))}
             </strong>
             <p>
-              {bikeA.mileage >= bikeB.mileage
-                ? bikeA.name
-                : bikeB.name}{" "}
-              has the higher listed sample mileage.
+              {bikeA.mileage === bikeB.mileage
+                ? "Both bikes have the same listed sample mileage."
+                : `${bikeA.mileage > bikeB.mileage ? bikeA.name : bikeB.name} has the higher listed sample mileage.`}
             </p>
           </div>
         </section>
