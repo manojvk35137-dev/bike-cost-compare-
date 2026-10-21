@@ -289,3 +289,82 @@ a:focus-visible {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+/* HOME PAGE ONLY — Standard font sizes */
+/* Login page styles remain unchanged */
+
+.app h1 {
+  font-size: 24px;
+  line-height: 1.3;
+}
+
+.app h2 {
+  font-size: 20px;
+  line-height: 1.35;
+}
+
+.app h3 {
+  font-size: 17px;
+  line-height: 1.4;
+}
+
+.app p,
+.app label,
+.app li {
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.app input,
+.app select,
+.app textarea {
+  font-size: 14px;
+}
+
+.app button {
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.app small,
+.app .muted,
+.app .subtitle {
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.app .bike-card,
+.app .comparison-card,
+.app .petrol-card {
+  font-size: 14px;
+}
+
+.app .bike-card strong,
+.app .comparison-card strong,
+.app .petrol-card strong {
+  font-size: 15px;
+}
+
+/* Mobile: keep text comfortable and consistent */
+@media (max-width: 480px) {
+  .app h1 {
+    font-size: 22px;
+  }
+
+  .app h2 {
+    font-size: 18px;
+  }
+
+  .app h3 {
+    font-size: 16px;
+  }
+
+  .app p,
+  .app label,
+  .app li,
+  .app button,
+  .app input,
+  .app select,
+  .app textarea {
+    font-size: 14px;
+  }
+}
