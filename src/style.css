@@ -93,3 +93,105 @@
     height: 110px;
   }
 }
+
+/* Bike photos: visible, responsive and mobile-friendly */
+.bike-photo {
+  width: 100%;
+  min-width: 0;
+  min-height: 150px;
+  margin: 8px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  overflow: hidden;
+  border-radius: 12px;
+  background: #eaf5ff;
+}
+
+.bike-photo > a:first-child {
+  display: flex;
+  width: 100%;
+  justify-content: center;
+}
+
+.bike-photo img {
+  display: block;
+  width: 100%;
+  height: 170px;
+  object-fit: contain;
+  border-radius: 12px;
+}
+
+.bike-photo-placeholder {
+  width: 100%;
+  min-height: 150px;
+  padding: 12px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+  color: #245477;
+}
+
+.bike-photo-placeholder span {
+  font-size: 42px;
+}
+
+.bike-photo-placeholder small,
+.photo-credit {
+  font-size: 11px;
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+
+.photo-credit {
+  padding: 0 8px 8px;
+}
+
+.suggestion-item {
+  display: grid;
+  grid-template-columns: minmax(95px, 130px) minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  margin: 10px 0;
+}
+
+.suggestion-item .bike-photo {
+  min-height: 90px;
+  margin: 0;
+}
+
+.suggestion-item .bike-photo img {
+  height: 90px;
+}
+
+.suggestion-item .bike-photo-placeholder {
+  min-height: 90px;
+  padding: 5px;
+}
+
+.suggestion-item .bike-photo-placeholder span {
+  font-size: 28px;
+}
+
+.suggestion-item .suggestion {
+  width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 420px) {
+  .suggestion-item {
+    grid-template-columns: 95px minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .bike-photo img {
+    height: 140px;
+  }
+}
