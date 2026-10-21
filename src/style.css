@@ -418,3 +418,126 @@ select {
   }
 }
 
+/* Navigation */
+.nav {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+  margin: 16px 0;
+}
+
+.nav button {
+  border: 1px solid #bfdbfe;
+  background: #fff;
+  color: #1e40af;
+  border-radius: 12px;
+  padding: 12px 5px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.nav button.nav-active {
+  background: #dbeafe;
+  border-color: #60a5fa;
+  color: #1d4ed8;
+}
+
+/* Buttons */
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.primary,
+.secondary {
+  width: 100%;
+  padding: 13px;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  margin-top: 12px;
+}
+
+.primary {
+  border: none;
+  background: #2563eb;
+  color: white;
+}
+
+.secondary {
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Dropdowns and comparison cards */
+select {
+  width: 100%;
+  padding: 13px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: white;
+  color: #172033;
+  font-size: 15px;
+}
+
+.compare-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.compare-card {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid #dbeafe;
+  border-radius: 14px;
+  background: #f8fbff;
+}
+
+.compare-card h3 {
+  font-size: 16px;
+  overflow-wrap: anywhere;
+}
+
+.compare-card p {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 13px;
+}
+
+.compare-card p span {
+  color: #64748b;
+}
+
+.compare-card p strong {
+  overflow-wrap: anywhere;
+}
+
+.account-panel p {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 420px) {
+  .nav {
+    gap: 4px;
+  }
+
+  .nav button {
+    padding: 10px 3px;
+    font-size: 11px;
+  }
+
+  .compare-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+
