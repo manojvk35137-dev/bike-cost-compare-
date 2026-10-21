@@ -422,8 +422,7 @@ function BikeAutocomplete({
           const next = event.target.value;
           setQuery(next);
           setFocused(true);
-
-          if (!next.trim()) onSelect("");
+          onSelect("");
         }}
         onKeyDown={(event) => {
           if (event.key === "Enter" && suggestions.length > 0) {
@@ -499,17 +498,25 @@ function App() {
   const [days, setDays] = useState("30");
   const [tab, setTab] = useState("search");
 
-  // Manual mileage is used only if the selected bike has no catalogue mileage.
-  const [manualMileageA, setManualMileageA] = useState("");
-  const [manualMileageB, setManualMileageB] = useState("");
+  // Custom mileage overrides are shared between both comparison tabs.
+  // An empty value means use the catalogue mileage.
+  const [customMileage, setCustomMileage] = useState<Record<string, string>>(
+    {}
+  );
 
-  useEffect(() => {
-    setManualMileageA("");
-  }, [first]);
+  function updateCustomMileage(bikeName: string, value: string) {
+    setCustomMileage((current) => ({
+      ...current,
+      [bikeName]: value,
+    }));
+  }
 
-  useEffect(() => {
-    setManualMileageB("");
-  }, [second]);
+  function resetCustomMileage(bikeName: string) {
+    setCustomMileage((current) => ({
+      ...current,
+      [bikeName]: "",
+    }));
+  }
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -517,7 +524,7 @@ function App() {
     try {
       localStorage.setItem("bike-app-theme", theme);
     } catch {
-      // Keep the selected theme for this session.
+      // Theme remains available for the current session.
     }
   }, [theme]);
 
@@ -623,34 +630,31 @@ function App() {
   const numberOfDays = Math.max(0, Number(days) || 0);
   const totalKm = km * numberOfDays;
 
-  // Catalogue mileage takes priority. Manual mileage is the fallback.
-  const effectiveMileage = (
-    bike: Bike | undefined,
-    manualValue: string
-  ): number | null => {
+  // Custom mileage overrides catalogue mileage when valid.
+  // Clearing the field returns to the original catalogue value.
+  function effectiveMileage(bike: Bike | undefined): number | null {
     if (!bike) return null;
 
-    if (bike.mileage != null && bike.mileage > 0) {
-      return bike.mileage;
+    const customValue = customMileage[bike.name] ?? "";
+
+    if (customValue.trim() !== "") {
+      const entered = Number(customValue);
+
+      return Number.isFinite(entered) && entered > 0 && entered <= 200
+        ? entered
+        : null;
     }
 
-    const entered = Number(manualValue);
-
-    return manualValue.trim() !== "" &&
-      Number.isFinite(entered) &&
-      entered > 0 &&
-      entered <= 200
-      ? entered
+    return bike.mileage != null && bike.mileage > 0
+      ? bike.mileage
       : null;
-  };
+  }
 
-  const mileageA = effectiveMileage(bikeA, manualMileageA);
-  const mileageB = effectiveMileage(bikeB, manualMileageB);
+  const mileageA = effectiveMileage(bikeA);
+  const mileageB = effectiveMileage(bikeB);
 
   const costFor = (mileage: number | null): number | null =>
-    mileage != null
-      ? (totalKm / mileage) * price
-      : null;
+    mileage != null ? (totalKm / mileage) * price : null;
 
   const costA = costFor(mileageA);
   const costB = costFor(mileageB);
@@ -1002,7 +1006,7 @@ function App() {
 
                 <div className="stats">
                   <div>
-                    <span>Estimated mileage</span>
+                    <span>Original estimated mileage</span>
                     <strong>{specifications(bikeA.mileage, " km/L")}</strong>
                   </div>
                   <div>
@@ -1031,19 +1035,21 @@ function App() {
                 </p>
               </>
             ) : (
-              <p className="muted">
-                Select a bike to see its details.
-              </p>
+              <p className="muted">Select a bike to see its details.</p>
             )}
           </section>
         </>
       )}
 
-      {tab === "compare" && (
+      {(tab === "compare" || tab === "petrol") && (
         <section className="panel">
-          <h2>🏁 Bike comparison</h2>
+          <h2>
+            {tab === "compare" ? "🏁 Bike comparison" : "⛽ Petrol cost comparison"}
+          </h2>
+
           <p className="muted">
-            Bike name type cheyyu. Suggestions-il ninnu select cheyyaam.
+            Bike name type cheythu suggestions-il ninnu select cheyyu.
+            Mileage edit cheythaal randu comparison tabs-ilum update aakum.
           </p>
 
           <BikeAutocomplete
@@ -1062,208 +1068,206 @@ function App() {
             onSelect={setSecond}
           />
 
-          <div className="compare-grid">
-            {[bikeA, bikeB].map((bike, index) =>
-              bike ? (
-                <div className="compare-card" key={`${bike.name}-${index}`}>
-                  <BikePhoto name={bike.name} />
-                  <h3>{bike.name}</h3>
-                  <p>
-                    <span>Estimated mileage</span>
-                    <strong>{specifications(bike.mileage, " km/L")}</strong>
-                  </p>
-                  <p>
-                    <span>Fuel tank</span>
-                    <strong>{specifications(bike.tank, " L")}</strong>
-                  </p>
-                  <p>
-                    <span>Indicative price</span>
-                    <strong>
-                      {bike.price == null
-                        ? "Not available"
-                        : `${money(bike.price)}*`}
-                    </strong>
-                  </p>
-                  <p>
-                    <span>Fuel cost per km</span>
-                    <strong>
-                      {bike.mileage == null || bike.mileage <= 0
-                        ? "Not available"
-                        : money(price / bike.mileage)}
-                    </strong>
-                  </p>
-                </div>
-              ) : null
-            )}
-          </div>
+          {tab === "petrol" && (
+            <>
+              <label htmlFor="petrol">Petrol price (₹/litre)</label>
+              <input
+                id="petrol"
+                type="number"
+                min="0"
+                step="0.01"
+                value={petrol}
+                onChange={(e) => setPetrol(e.target.value)}
+              />
 
-          {bikeA && bikeB && (
-            <div className="result">
-              <span>Comparison summary</span>
-              <p>
-                {bikeA.name === bikeB.name
-                  ? "Randilum same bike aanu select cheythirikkunnath."
-                  : bikeA.mileage == null || bikeB.mileage == null
-                    ? "Mileage comparison-inu specification data available alla."
-                    : bikeA.mileage === bikeB.mileage
-                      ? "Randinum same listed mileage aanu."
-                      : `${bikeA.mileage > bikeB.mileage ? bikeA.name : bikeB.name} has the higher listed mileage.`}
+              <p className="muted">
+                Petrol price manually enter cheyyuka. This is not a live rate feed.
               </p>
-            </div>
+
+              <label htmlFor="dailyKm">Daily distance (km)</label>
+              <input
+                id="dailyKm"
+                type="number"
+                min="0"
+                step="0.1"
+                value={dailyKm}
+                onChange={(e) => setDailyKm(e.target.value)}
+              />
+
+              <label htmlFor="days">Number of days</label>
+              <input
+                id="days"
+                type="number"
+                min="0"
+                step="1"
+                value={days}
+                onChange={(e) => setDays(e.target.value)}
+              />
+
+              <div className="result">
+                <span>Total travel distance</span>
+                <strong>{totalKm.toLocaleString("en-IN")} km</strong>
+              </div>
+            </>
           )}
-
-          <p className="muted">
-            Online catalogue provides model names, not verified specifications.
-          </p>
-        </section>
-      )}
-
-      {tab === "petrol" && (
-        <section className="panel">
-          <h2>⛽ Petrol cost comparison</h2>
-
-          <label htmlFor="petrol">Petrol price (₹/litre)</label>
-          <input
-            id="petrol"
-            type="number"
-            min="0"
-            step="0.01"
-            value={petrol}
-            onChange={(e) => setPetrol(e.target.value)}
-          />
-
-          <p className="muted">
-            Petrol price manually enter cheyyuka. This is not a live rate feed.
-          </p>
-
-          <label htmlFor="dailyKm">Daily distance (km)</label>
-          <input
-            id="dailyKm"
-            type="number"
-            min="0"
-            step="0.1"
-            value={dailyKm}
-            onChange={(e) => setDailyKm(e.target.value)}
-          />
-
-          <label htmlFor="days">Number of days</label>
-          <input
-            id="days"
-            type="number"
-            min="0"
-            step="1"
-            value={days}
-            onChange={(e) => setDays(e.target.value)}
-          />
 
           <div className="compare-grid">
             {[
-              {
-                bike: bikeA,
-                mileage: mileageA,
-                manual: manualMileageA,
-                setManual: setManualMileageA,
-                cost: costA,
-                label: "First bike",
-              },
-              {
-                bike: bikeB,
-                mileage: mileageB,
-                manual: manualMileageB,
-                setManual: setManualMileageB,
-                cost: costB,
-                label: "Second bike",
-              },
+              { bike: bikeA, mileage: mileageA, cost: costA, label: "First bike" },
+              { bike: bikeB, mileage: mileageB, cost: costB, label: "Second bike" },
             ].map((item) => {
-              const { bike, mileage, manual, setManual, cost, label } = item;
-
+              const { bike, mileage, cost, label } = item;
               if (!bike) return null;
+
+              const customValue = customMileage[bike.name] ?? "";
+              const isCustom = customValue.trim() !== "";
 
               return (
                 <div className="compare-card" key={label}>
                   <BikePhoto name={bike.name} />
                   <h3>{bike.name}</h3>
 
-                  {bike.mileage == null || bike.mileage <= 0 ? (
-                    <div className="manual-mileage">
-                      <label htmlFor={`manual-${label}`}>
-                        Your mileage (km/L)
-                      </label>
-                      <input
-                        id={`manual-${label}`}
-                        type="number"
-                        min="0.1"
-                        max="200"
-                        step="0.1"
-                        inputMode="decimal"
-                        placeholder="Enter mileage, e.g. 35"
-                        value={manual}
-                        onChange={(e) => setManual(e.target.value)}
-                      />
-                      <small className="muted">
-                        Database mileage unavailable. Enter your own mileage.
-                      </small>
-                    </div>
-                  ) : null}
+                  <p>
+                    <span>Original database mileage</span>
+                    <strong>{specifications(bike.mileage, " km/L")}</strong>
+                  </p>
+
+                  <div className="manual-mileage">
+                    <label htmlFor={`mileage-${label}`}>
+                      ✏️ Your mileage (km/L)
+                    </label>
+                    <input
+                      id={`mileage-${label}`}
+                      type="number"
+                      min="0.1"
+                      max="200"
+                      step="0.1"
+                      inputMode="decimal"
+                      placeholder={
+                        bike.mileage != null
+                          ? `Default: ${bike.mileage} km/L`
+                          : "Enter mileage, e.g. 35"
+                      }
+                      value={customValue}
+                      onChange={(e) =>
+                        updateCustomMileage(bike.name, e.target.value)
+                      }
+                    />
+
+                    <small className="muted">
+                      {isCustom
+                        ? "Custom mileage active."
+                        : "Using original database mileage."}
+                    </small>
+
+                    {isCustom && (
+                      <button
+                        type="button"
+                        className="secondary"
+                        onClick={() => resetCustomMileage(bike.name)}
+                      >
+                        ↩ Reset to original mileage
+                      </button>
+                    )}
+                  </div>
 
                   <p>
                     <span>Used mileage</span>
                     <strong>
-                      {mileage == null
-                        ? "Enter mileage above"
-                        : `${mileage} km/L`}
+                      {mileage == null ? "Enter a valid mileage" : `${mileage} km/L`}
                     </strong>
                   </p>
 
-                  <p>
-                    <span>Estimated fuel required</span>
-                    <strong>
-                      {mileage == null
-                        ? "Not available"
-                        : `${(totalKm / mileage).toFixed(2)} L`}
-                    </strong>
-                  </p>
-
-                  <p>
-                    <span>Estimated total fuel cost</span>
-                    <strong>
-                      {cost == null ? "Not available" : money(cost)}
-                    </strong>
-                  </p>
-
-                  <p>
-                    <span>Daily cost</span>
-                    <strong>
-                      {mileage == null
-                        ? "Not available"
-                        : money((km / mileage) * price)}
-                    </strong>
-                  </p>
+                  {tab === "compare" ? (
+                    <>
+                      <p>
+                        <span>Fuel cost per km</span>
+                        <strong>
+                          {mileage == null
+                            ? "Not available"
+                            : money(price / mileage)}
+                        </strong>
+                      </p>
+                      <p>
+                        <span>Fuel tank</span>
+                        <strong>{specifications(bike.tank, " L")}</strong>
+                      </p>
+                      <p>
+                        <span>Indicative price</span>
+                        <strong>
+                          {bike.price == null
+                            ? "Not available"
+                            : `${money(bike.price)}*`}
+                        </strong>
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p>
+                        <span>Estimated fuel required</span>
+                        <strong>
+                          {mileage == null
+                            ? "Not available"
+                            : `${(totalKm / mileage).toFixed(2)} L`}
+                        </strong>
+                      </p>
+                      <p>
+                        <span>Estimated total fuel cost</span>
+                        <strong>{cost == null ? "Not available" : money(cost)}</strong>
+                      </p>
+                      <p>
+                        <span>Daily fuel cost</span>
+                        <strong>
+                          {mileage == null
+                            ? "Not available"
+                            : money((km / mileage) * price)}
+                        </strong>
+                      </p>
+                    </>
+                  )}
                 </div>
               );
             })}
           </div>
 
-          <div className="result">
-            <span>Estimated difference over {numberOfDays} days</span>
-            <strong>
-              {costA == null || costB == null
-                ? "Enter mileage for both bikes"
-                : money(Math.abs(costA - costB))}
-            </strong>
+          {tab === "compare" && bikeA && bikeB && (
+            <div className="result">
+              <span>Comparison summary</span>
+              <p>
+                {bikeA.name === bikeB.name
+                  ? "Randilum same bike aanu select cheythirikkunnath."
+                  : mileageA == null || mileageB == null
+                    ? "Valid mileage values enter cheyyu."
+                    : mileageA === mileageB
+                      ? "Randinum same mileage value aanu."
+                      : `${mileageA > mileageB ? bikeA.name : bikeB.name} has the higher mileage value.`}
+              </p>
+            </div>
+          )}
 
-            <p>
-              {mileageA == null || mileageB == null
-                ? "Comparison-inu randu bikes-inte mileage venam."
-                : mileageA === mileageB
-                  ? "Both bikes have the same mileage value."
-                  : `${mileageA > mileageB ? bikeA?.name : bikeB?.name} has the higher mileage value entered.`}
-            </p>
-          </div>
+          {tab === "petrol" && (
+            <div className="result">
+              <span>Estimated fuel-cost difference over {numberOfDays} days</span>
+              <strong>
+                {costA == null || costB == null
+                  ? "Enter valid mileage for both bikes"
+                  : money(Math.abs(costA - costB))}
+              </strong>
+
+              <p>
+                {mileageA == null || mileageB == null
+                  ? "Comparison-inu randu bikes-inum valid mileage venam."
+                  : mileageA === mileageB
+                    ? "Both bikes have the same mileage value."
+                    : `${mileageA > mileageB ? bikeA?.name : bikeB?.name} has the higher mileage value entered.`}
+              </p>
+            </div>
+          )}
 
           <p className="muted">
-            Manual mileage is used only when catalogue mileage is unavailable.
-            Results are estimates based on the values entered.
+            Database values are estimates, not guaranteed real-world mileage.
+            Custom mileage is used in both comparison tabs. Values reset if the
+            app is refreshed because custom mileage is currently session-only.
           </p>
         </section>
       )}
