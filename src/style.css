@@ -142,3 +142,150 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Bike Cost Compare - clean single-photo layout */
+.bike-photo {
+  width: 100%;
+  min-width: 0;
+  margin: 12px 0;
+}
+
+.bike-photo-image {
+  display: block;
+  width: 100%;
+  height: 210px;
+  object-fit: contain;
+  background: var(--soft-blue, #eaf2ff);
+  border: 1px solid var(--border, #dbe5f1);
+  border-radius: 12px;
+}
+
+.bike-photo-placeholder {
+  min-height: 115px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  padding: 14px;
+  text-align: center;
+  border: 1px dashed var(--border, #dbe5f1);
+  border-radius: 12px;
+  background: var(--soft-blue, #eaf2ff);
+}
+
+.bike-photo-icon {
+  font-size: 28px;
+}
+
+.photo-credit {
+  display: block;
+  margin-top: 7px;
+  font-size: 11px;
+  color: var(--muted, #64748b);
+  overflow-wrap: anywhere;
+}
+
+.suggestions {
+  display: grid;
+  gap: 7px;
+  margin-top: 12px;
+}
+
+.suggestion {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border, #dbe5f1);
+  border-radius: 10px;
+  background: var(--surface, #fff);
+  color: var(--text, #172b4d);
+  text-align: left;
+}
+
+.suggestion span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.suggestion small {
+  flex-shrink: 0;
+  color: var(--muted, #64748b);
+}
+
+.suggestion:hover {
+  border-color: var(--primary, #2563eb);
+}
+
+.suggestions .muted {
+  margin: 3px 0;
+}
+
+.compare-card,
+.panel {
+  min-width: 0;
+}
+
+.compare-card p {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.compare-card p span {
+  color: var(--muted, #64748b);
+  font-size: 13px;
+}
+
+.compare-card p strong {
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+input,
+select,
+button {
+  max-width: 100%;
+}
+
+input:focus-visible,
+select:focus-visible,
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--primary, #2563eb);
+  outline-offset: 2px;
+}
+
+@media (max-width: 480px) {
+  .app {
+    width: calc(100% - 20px);
+    padding-top: 14px;
+  }
+
+  .panel {
+    padding: 15px;
+    border-radius: 14px;
+  }
+
+  .bike-photo-image {
+    height: 185px;
+  }
+
+  .nav {
+    gap: 5px;
+  }
+
+  .nav button {
+    padding: 10px 4px;
+    font-size: 12px;
+  }
+
+  .compare-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
