@@ -290,3 +290,41 @@ footer {
     grid-template-columns: 1fr;
   }
 }
+
+/* Prevent unwanted horizontal sliding */
+html,
+body,
+#root {
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  overflow-x: hidden;
+}
+
+.app {
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  overflow-x: clip;
+}
+
+.panel,
+header,
+.nav,
+.compare-grid,
+.compare-card {
+  min-width: 0;
+  max-width: 100%;
+}
+
+input,
+select,
+button {
+  max-width: 100%;
+}
+
+.nav button {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
