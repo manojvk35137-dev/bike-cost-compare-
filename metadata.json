@@ -1,0 +1,6 @@
+{
+  "name": "Bike Cost Compare",
+  "description": "Native Android & Web Motorcycle Fuel & Cost Comparison Tool with instant suggestions, editable mileage, Indian Rupees, and Android Jetpack Compose project export.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
