@@ -1,197 +1,144 @@
 
-/* Online bike photo styles */
-.bike-photo {
+/* ===== SETTINGS BUTTON ===== */
+.settings-panel {
   width: 100%;
-  min-width: 0;
-  margin: 8px 0 12px;
-  overflow: hidden;
-  border: 1px solid #dbeafe;
-  border-radius: 12px;
-  background: #f8fbff;
+  margin: 12px 0;
 }
 
-.bike-photo-link {
-  display: block;
+.settings-button {
   width: 100%;
-}
-
-.bike-photo img {
-  display: block;
-  width: 100%;
-  height: 180px;
-  object-fit: contain;
-  background: #ffffff;
-}
-
-.photo-credit {
-  display: block;
-  padding: 7px 9px;
-  color: #1d4ed8;
-  font-size: 11px;
-  line-height: 1.5;
-  overflow-wrap: anywhere;
-  text-decoration: underline;
-}
-
-.bike-photo-placeholder {
   display: flex;
-  min-height: 120px;
-  flex-direction: column;
+  justify-content: space-between;
   align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 14px;
-  color: #64748b;
-  text-align: center;
+  gap: 10px;
+  margin: 0 0 10px;
 }
 
-.bike-photo-placeholder span {
-  font-size: 38px;
+.settings-content {
+  padding: 16px;
+  margin-bottom: 12px;
+  border-radius: 14px;
+  background: #ffffff;
+  border: 1px solid #d8e7f7;
+  color: #19324d;
 }
 
-.bike-photo-placeholder small {
-  font-size: 12px;
-}
-
-.bike-photo-placeholder a {
-  color: #1d4ed8;
-  font-size: 12px;
-}
-
-.suggestion-item {
-  min-width: 0;
-  padding: 8px;
-  border: 1px solid #dbeafe;
-  border-radius: 12px;
-  background: #f8fbff;
-}
-
-.suggestion-item .bike-photo {
+.settings-content h3 {
   margin-top: 0;
 }
 
-.suggestion-item .bike-photo img {
-  height: 125px;
-}
-
-.suggestion-item .suggestion {
-  width: 100%;
-  border: 0;
-  background: transparent;
-}
-
-.suggestion-item .suggestion:hover {
-  background: #dbeafe;
-}
-
-@media (max-width: 420px) {
-  .bike-photo img {
-    height: 150px;
-  }
-
-  .suggestion-item .bike-photo img {
-    height: 110px;
-  }
-}
-
-/* Bike photos: visible, responsive and mobile-friendly */
-.bike-photo {
-  width: 100%;
-  min-width: 0;
-  min-height: 150px;
-  margin: 8px 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  overflow: hidden;
-  border-radius: 12px;
-  background: #eaf5ff;
-}
-
-.bike-photo > a:first-child {
-  display: flex;
-  width: 100%;
-  justify-content: center;
-}
-
-.bike-photo img {
-  display: block;
-  width: 100%;
-  height: 170px;
-  object-fit: contain;
-  border-radius: 12px;
-}
-
-.bike-photo-placeholder {
-  width: 100%;
-  min-height: 150px;
-  padding: 12px;
-  box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  text-align: center;
-  color: #245477;
-}
-
-.bike-photo-placeholder span {
-  font-size: 42px;
-}
-
-.bike-photo-placeholder small,
-.photo-credit {
-  font-size: 11px;
-  overflow-wrap: anywhere;
-  text-align: center;
-}
-
-.photo-credit {
-  padding: 0 8px 8px;
-}
-
-.suggestion-item {
+.theme-options {
   display: grid;
-  grid-template-columns: minmax(95px, 130px) minmax(0, 1fr);
-  align-items: center;
+  grid-template-columns: 1fr 1fr;
   gap: 10px;
-  margin: 10px 0;
+  margin-top: 12px;
 }
 
-.suggestion-item .bike-photo {
-  min-height: 90px;
-  margin: 0;
+.theme-choice {
+  padding: 12px 8px;
+  border: 1px solid #cbd8e8;
+  border-radius: 10px;
+  background: #f1f7ff;
+  color: #19324d;
+  cursor: pointer;
+  font: inherit;
 }
 
-.suggestion-item .bike-photo img {
-  height: 90px;
+.theme-choice.theme-selected {
+  border: 2px solid #2785df;
+  background: #dceeff;
+  font-weight: 700;
 }
 
-.suggestion-item .bike-photo-placeholder {
-  min-height: 90px;
-  padding: 5px;
+/* ===== DARK MODE ===== */
+:root[data-theme="dark"] {
+  color-scheme: dark;
 }
 
-.suggestion-item .bike-photo-placeholder span {
-  font-size: 28px;
+:root[data-theme="dark"] body {
+  background: #101722;
+  color: #edf3fc;
 }
 
-.suggestion-item .suggestion {
-  width: 100%;
-  min-width: 0;
-  overflow-wrap: anywhere;
+:root[data-theme="dark"] .app {
+  background: transparent;
+  color: #edf3fc;
+}
+
+:root[data-theme="dark"] .panel,
+:root[data-theme="dark"] .account-panel,
+:root[data-theme="dark"] .compare-card,
+:root[data-theme="dark"] .suggestion-item,
+:root[data-theme="dark"] .result,
+:root[data-theme="dark"] .settings-content {
+  background: #1b2636;
+  color: #edf3fc;
+  border-color: #35445a;
+}
+
+:root[data-theme="dark"] input,
+:root[data-theme="dark"] select {
+  background: #111b29;
+  color: #edf3fc;
+  border-color: #46566d;
+}
+
+:root[data-theme="dark"] input::placeholder {
+  color: #aab8ca;
+}
+
+:root[data-theme="dark"] .muted,
+:root[data-theme="dark"] .compare-card span,
+:root[data-theme="dark"] .stats span,
+:root[data-theme="dark"] .settings-content p {
+  color: #bdc9d9;
+}
+
+:root[data-theme="dark"] .secondary,
+:root[data-theme="dark"] .suggestion,
+:root[data-theme="dark"] .theme-choice {
+  background: #26364a;
+  color: #edf3fc;
+  border-color: #46566d;
+}
+
+:root[data-theme="dark"] .theme-choice.theme-selected {
+  background: #24496d;
+  border-color: #8ac5ff;
+}
+
+:root[data-theme="dark"] .nav {
+  background: #182334;
+}
+
+:root[data-theme="dark"] .nav button {
+  color: #edf3fc;
+}
+
+:root[data-theme="dark"] .nav button.nav-active {
+  background: #8ac5ff;
+  color: #102033;
+}
+
+:root[data-theme="dark"] footer {
+  color: #bdc9d9;
+}
+
+:root[data-theme="dark"] a {
+  color: #8ac5ff;
+}
+
+:root[data-theme="dark"] summary {
+  color: #edf3fc;
+}
+
+:root[data-theme="dark"] .bike-photo-placeholder {
+  background: #172334;
+  color: #edf3fc;
 }
 
 @media (max-width: 420px) {
-  .suggestion-item {
-    grid-template-columns: 95px minmax(0, 1fr);
-    gap: 8px;
-  }
-
-  .bike-photo img {
-    height: 140px;
+  .theme-options {
+    grid-template-columns: 1fr;
   }
 }
