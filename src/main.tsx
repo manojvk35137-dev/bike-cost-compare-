@@ -3,9 +3,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   onAuthStateChanged,
-  sendSignInLinkToEmail,
-  isSignInWithEmailLink,
-  signInWithEmailLink,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
   signOut,
   type User,
 } from "firebase/auth";
@@ -39,12 +38,17 @@ const bikes: Bike[] = [
 ];
 
 const money = (value: number) =>
-  "₹" + value.toLocaleString("en-IN", { maximumFractionDigits: 2 });
+  "₹" + value.toLocaleString("en-IN", {
+    maximumFractionDigits: 2,
+  });
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
+
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [authMode, setAuthMode] = useState<"login" | "signup">("login");
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
 
@@ -57,55 +61,36 @@ function App() {
   const [tab, setTab] = useState("search");
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-      setAuthLoading(false);
-    });
+    const unsubscribe = onAuthStateChanged(
+      auth,
+      (currentUser) => {
+        setUser(currentUser);
+        setAuthLoading(false);
+      },
+      (error) => {
+        console.error("Authentication state error:", error);
+        setMessage("Login status load cheyyaan pattiyilla.");
+        setAuthLoading(false);
+      }
+    );
 
     return unsubscribe;
   }, []);
 
-  useEffect(() => {
-    async function finishEmailLogin() {
-      if (!isSignInWithEmailLink(auth, window.location.href)) return;
+  const handleAuth = async (
+    event: React.FormEvent<HTMLFormElement>
+  ) => {
+    event.preventDefault();
 
-      let savedEmail = window.localStorage.getItem("bikeLoginEmail");
-
-      if (!savedEmail) {
-        savedEmail = window.prompt(
-          "Enter the email address where you received the sign-in link:"
-        );
-      }
-
-      if (!savedEmail) {
-        setMessage("Login complete cheyyaan email address venam.");
-        return;
-      }
-
-      try {
-        await signInWithEmailLink(
-          auth,
-          savedEmail.trim(),
-          window.location.href
-        );
-        window.localStorage.removeItem("bikeLoginEmail");
-        window.history.replaceState({}, document.title, window.location.pathname);
-        setMessage("Login successful!");
-      } catch {
-        setMessage(
-          "Login link invalid or expired. App-il puthiya sign-in link request cheyyu."
-        );
-      }
-    }
-
-    void finishEmailLogin();
-  }, []);
-
-  const sendLoginLink = async () => {
     const cleanEmail = email.trim();
 
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
-      setMessage("Valid email address enter cheyyu.");
+    if (!cleanEmail || !password) {
+      setMessage("Emailum passwordum enter cheyyu.");
+      return;
+    }
+
+    if (password.length < 6) {
+      setMessage("Password minimum 6 characters venam.");
       return;
     }
 
@@ -113,20 +98,94 @@ function App() {
     setMessage("");
 
     try {
-      await sendSignInLinkToEmail(auth, cleanEmail, {
-        url: window.location.origin + window.location.pathname,
-        handleCodeInApp: true,
-      });
+      if (authMode === "signup") {
+        await createUserWithEmailAndPassword(
+          auth,
+          cleanEmail,
+          password
+        );
+        setMessage("Account create cheythu! Login successful ❤️");
+      } else {
+        await signInWithEmailAndPassword(
+          auth,
+          cleanEmail,
+          password
+        );
+        setMessage("Login successful!");
+      }
+    } catch (error: unknown) {
+      console.error("Authentication error:", error);
 
-      window.localStorage.setItem("bikeLoginEmail", cleanEmail);
-      setMessage("Email-il sign-in link ayachittundu. Inbox check cheyyu!");
-    } catch (error) {
-      console.error(error);
-      setMessage(
-        "Link send aayilla. Firebase Email link settingsum Authorized domainsum check cheyyu."
-      );
+      const code =
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error
+          ? String(error.code)
+          : "";
+
+      switch (code) {
+        case "auth/email-already-in-use":
+          setMessage(
+            "Ee email-inu account already undu. Login cheyyu."
+          );
+          break;
+
+        case "auth/invalid-email":
+          setMessage("Valid email address enter cheyyu.");
+          break;
+
+        case "auth/weak-password":
+          setMessage(
+            "Password weak aanu. Minimum 6 characters use cheyyu."
+          );
+          break;
+
+        case "auth/invalid-credential":
+        case "auth/wrong-password":
+        case "auth/user-not-found":
+          setMessage(
+            "Email allenkil password correct alla. Veendum check cheyyu."
+          );
+          break;
+
+        case "auth/too-many-requests":
+          setMessage(
+            "Valare adhikam attempts undayi. Kurachu kazhinju try cheyyu."
+          );
+          break;
+
+        case "auth/network-request-failed":
+          setMessage("Internet connection check cheythu retry cheyyu.");
+          break;
+
+        case "auth/operation-not-allowed":
+          setMessage(
+            "Firebase Console-il Email/Password sign-in enable cheyyanam."
+          );
+          break;
+
+        default:
+          setMessage(
+            "Authentication failed. Firebase settings check cheyyu."
+          );
+      }
     } finally {
       setSending(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    setMessage("");
+
+    try {
+      await signOut(auth);
+      setPassword("");
+      setEmail("");
+      setAuthMode("login");
+      setMessage("Logout successful.");
+    } catch (error) {
+      console.error("Logout error:", error);
+      setMessage("Logout cheyyaan pattiyilla. Veendum try cheyyu.");
     }
   };
 
@@ -135,6 +194,7 @@ function App() {
 
   const suggestions = useMemo(() => {
     const q = search.trim().toLowerCase();
+
     return bikes
       .filter((bike) => !q || bike.name.toLowerCase().includes(q))
       .slice(0, 10);
@@ -149,7 +209,11 @@ function App() {
     bike.mileage > 0 ? (totalKm / bike.mileage) * price : 0;
 
   if (authLoading) {
-    return <main className="app"><section className="panel">Loading...</section></main>;
+    return (
+      <main className="app">
+        <section className="panel">Loading...</section>
+      </main>
+    );
   }
 
   if (!user) {
@@ -164,25 +228,84 @@ function App() {
         </header>
 
         <section className="panel">
-          <h2>🔐 Passwordless login</h2>
-          <p>Enter your email. We will send you a secure sign-in link.</p>
-          <label htmlFor="loginEmail">Email address</label>
-          <input
-            id="loginEmail"
-            type="email"
-            autoComplete="email"
-            placeholder="you@example.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
-          <button className="primary" onClick={sendLoginLink} disabled={sending}>
-            {sending ? "Sending..." : "Send sign-in link"}
-          </button>
-          {message && <p role="status" className="muted">{message}</p>}
-          <p className="muted">
-            Check your inbox and spam folder. Open the link in the same app or
-            browser where you started login.
+          <h2>
+            🔐 {authMode === "login" ? "Welcome Back" : "Create Account"}
+          </h2>
+
+          <p>
+            {authMode === "login"
+              ? "Emailum passwordum use cheythu login cheyyu."
+              : "Puthiya account create cheyyuka."}
           </p>
+
+          <form onSubmit={handleAuth}>
+            <label htmlFor="loginEmail">Email address</label>
+            <input
+              id="loginEmail"
+              type="email"
+              autoComplete="email"
+              placeholder="you@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+
+            <label htmlFor="loginPassword">Password</label>
+            <input
+              id="loginPassword"
+              type="password"
+              autoComplete={
+                authMode === "login"
+                  ? "current-password"
+                  : "new-password"
+              }
+              placeholder="Minimum 6 characters"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              minLength={6}
+              required
+            />
+
+            <button
+              className="primary"
+              type="submit"
+              disabled={sending}
+            >
+              {sending
+                ? "Please wait..."
+                : authMode === "login"
+                  ? "Login"
+                  : "Create Account"}
+            </button>
+          </form>
+
+          <p className="muted">
+            {authMode === "login"
+              ? "Account illenkil thazhe Create Account select cheyyu."
+              : "Account already undenkil Login select cheyyu."}
+          </p>
+
+          <button
+            className="secondary"
+            type="button"
+            disabled={sending}
+            onClick={() => {
+              setAuthMode(
+                authMode === "login" ? "signup" : "login"
+              );
+              setMessage("");
+            }}
+          >
+            {authMode === "login"
+              ? "Create New Account"
+              : "Already have an account? Login"}
+          </button>
+
+          {message && (
+            <p role="status" className="muted">
+              {message}
+            </p>
+          )}
         </section>
 
         <footer>Created by Nidhin ❤️</footer>
@@ -201,16 +324,39 @@ function App() {
       </header>
 
       <section className="panel">
-        <p>Logged in as <strong>{user.email}</strong></p>
-        <button className="secondary" onClick={() => signOut(auth)}>
+        <p>
+          Logged in as <strong>{user.email}</strong>
+        </p>
+        <button
+          className="secondary"
+          onClick={handleLogout}
+        >
           Log out
         </button>
+        {message && (
+          <p role="status" className="muted">{message}</p>
+        )}
       </section>
 
       <nav className="nav">
-        <button className={tab === "search" ? "nav-active" : ""} onClick={() => setTab("search")}>Bike search</button>
-        <button className={tab === "compare" ? "nav-active" : ""} onClick={() => setTab("compare")}>Bike comparison</button>
-        <button className={tab === "petrol" ? "nav-active" : ""} onClick={() => setTab("petrol")}>Petrol comparison</button>
+        <button
+          className={tab === "search" ? "nav-active" : ""}
+          onClick={() => setTab("search")}
+        >
+          Bike search
+        </button>
+        <button
+          className={tab === "compare" ? "nav-active" : ""}
+          onClick={() => setTab("compare")}
+        >
+          Bike comparison
+        </button>
+        <button
+          className={tab === "petrol" ? "nav-active" : ""}
+          onClick={() => setTab("petrol")}
+        >
+          Petrol comparison
+        </button>
       </nav>
 
       {tab === "search" && (
@@ -225,6 +371,7 @@ function App() {
               placeholder="Type e.g. Bullet 350"
               autoComplete="off"
             />
+
             <div className="suggestions">
               {suggestions.map((bike) => (
                 <button
@@ -240,6 +387,7 @@ function App() {
                   <small>{bike.mileage} km/L*</small>
                 </button>
               ))}
+
               {suggestions.length === 0 && (
                 <p className="muted">
                   No match in the current sample list. Try a shorter spelling.
@@ -247,15 +395,27 @@ function App() {
               )}
             </div>
           </section>
+
           <section className="panel">
             <h2>Selected bike</h2>
             <h3>{bikeA.name}</h3>
             <div className="stats">
-              <div><span>Estimated mileage</span><strong>{bikeA.mileage} km/L*</strong></div>
-              <div><span>Fuel tank</span><strong>{bikeA.tank} L*</strong></div>
-              <div><span>Indicative price</span><strong>{money(bikeA.price)}*</strong></div>
+              <div>
+                <span>Estimated mileage</span>
+                <strong>{bikeA.mileage} km/L*</strong>
+              </div>
+              <div>
+                <span>Fuel tank</span>
+                <strong>{bikeA.tank} L*</strong>
+              </div>
+              <div>
+                <span>Indicative price</span>
+                <strong>{money(bikeA.price)}*</strong>
+              </div>
             </div>
-            <p className="muted">*Sample estimates, not verified current specifications or on-road prices.</p>
+            <p className="muted">
+              *Sample estimates, not verified current specifications or on-road prices.
+            </p>
           </section>
         </>
       )}
@@ -263,59 +423,125 @@ function App() {
       {tab === "compare" && (
         <section className="panel">
           <h2>🏁 Bike comparison</h2>
+
           <label htmlFor="bikeA">First bike</label>
-          <select id="bikeA" value={first} onChange={(e) => setFirst(e.target.value)}>
-            {bikes.map((b) => <option key={b.name} value={b.name}>{b.name}</option>)}
+          <select
+            id="bikeA"
+            value={first}
+            onChange={(e) => setFirst(e.target.value)}
+          >
+            {bikes.map((b) => (
+              <option key={b.name} value={b.name}>{b.name}</option>
+            ))}
           </select>
 
           <label htmlFor="bikeB">Second bike</label>
-          <select id="bikeB" value={second} onChange={(e) => setSecond(e.target.value)}>
-            {bikes.map((b) => <option key={b.name} value={b.name}>{b.name}</option>)}
+          <select
+            id="bikeB"
+            value={second}
+            onChange={(e) => setSecond(e.target.value)}
+          >
+            {bikes.map((b) => (
+              <option key={b.name} value={b.name}>{b.name}</option>
+            ))}
           </select>
 
           <div className="compare-grid">
             {[bikeA, bikeB].map((bike) => (
               <div className="compare-card" key={bike.name}>
                 <h3>{bike.name}</h3>
-                <p><span>Estimated mileage</span><strong>{bike.mileage} km/L*</strong></p>
-                <p><span>Fuel tank</span><strong>{bike.tank} L*</strong></p>
-                <p><span>Indicative price</span><strong>{money(bike.price)}*</strong></p>
-                <p><span>Cost per km</span><strong>{money(price / bike.mileage)}</strong></p>
+                <p>
+                  <span>Estimated mileage</span>
+                  <strong>{bike.mileage} km/L*</strong>
+                </p>
+                <p>
+                  <span>Fuel tank</span>
+                  <strong>{bike.tank} L*</strong>
+                </p>
+                <p>
+                  <span>Indicative price</span>
+                  <strong>{money(bike.price)}*</strong>
+                </p>
+                <p>
+                  <span>Cost per km</span>
+                  <strong>{money(price / bike.mileage)}</strong>
+                </p>
               </div>
             ))}
           </div>
-          <p className="muted">*Approximate sample data. Confirm model year and local dealer prices.</p>
+
+          <p className="muted">
+            *Approximate sample data. Confirm model year and local dealer prices.
+          </p>
         </section>
       )}
 
       {tab === "petrol" && (
         <section className="panel">
           <h2>⛽ Petrol cost comparison</h2>
+
           <label htmlFor="petrol">Petrol price (₹/litre)</label>
-          <input id="petrol" type="number" min="0" step="0.01" value={petrol} onChange={(e) => setPetrol(e.target.value)} />
-          <p className="muted">Enter the current rate yourself. This is not a live petrol-price feed.</p>
+          <input
+            id="petrol"
+            type="number"
+            min="0"
+            step="0.01"
+            value={petrol}
+            onChange={(e) => setPetrol(e.target.value)}
+          />
+          <p className="muted">
+            Enter the current rate yourself. This is not a live petrol-price feed.
+          </p>
 
           <label htmlFor="dailyKm">Daily distance (km)</label>
-          <input id="dailyKm" type="number" min="0" value={dailyKm} onChange={(e) => setDailyKm(e.target.value)} />
+          <input
+            id="dailyKm"
+            type="number"
+            min="0"
+            value={dailyKm}
+            onChange={(e) => setDailyKm(e.target.value)}
+          />
 
           <label htmlFor="days">Number of days</label>
-          <input id="days" type="number" min="0" value={days} onChange={(e) => setDays(e.target.value)} />
+          <input
+            id="days"
+            type="number"
+            min="0"
+            value={days}
+            onChange={(e) => setDays(e.target.value)}
+          />
 
           <div className="compare-grid">
             {[bikeA, bikeB].map((bike) => (
               <div className="compare-card" key={bike.name}>
                 <h3>{bike.name}</h3>
-                <p><span>Estimated total fuel cost</span><strong>{money(costFor(bike))}</strong></p>
-                <p><span>Estimated fuel required</span><strong>{(totalKm / bike.mileage).toFixed(2)} L</strong></p>
-                <p><span>Daily cost</span><strong>{money((km / bike.mileage) * price)}</strong></p>
+                <p>
+                  <span>Estimated total fuel cost</span>
+                  <strong>{money(costFor(bike))}</strong>
+                </p>
+                <p>
+                  <span>Estimated fuel required</span>
+                  <strong>{(totalKm / bike.mileage).toFixed(2)} L</strong>
+                </p>
+                <p>
+                  <span>Daily cost</span>
+                  <strong>{money((km / bike.mileage) * price)}</strong>
+                </p>
               </div>
             ))}
           </div>
 
           <div className="result">
             <span>Estimated savings over {numberOfDays} days</span>
-            <strong>{money(Math.abs(costFor(bikeA) - costFor(bikeB)))}</strong>
-            <p>{bikeA.mileage >= bikeB.mileage ? bikeA.name : bikeB.name} has the higher listed sample mileage.</p>
+            <strong>
+              {money(Math.abs(costFor(bikeA) - costFor(bikeB)))}
+            </strong>
+            <p>
+              {bikeA.mileage >= bikeB.mileage
+                ? bikeA.name
+                : bikeB.name}{" "}
+              has the higher listed sample mileage.
+            </p>
           </div>
         </section>
       )}
@@ -329,5 +555,7 @@ function App() {
 }
 
 createRoot(document.getElementById("root")!).render(
-  <React.StrictMode><App /></React.StrictMode>
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
 );
