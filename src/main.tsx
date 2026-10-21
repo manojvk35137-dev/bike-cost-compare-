@@ -119,7 +119,7 @@ function getBikeSuggestions(query: string, bikes: Bike[]): Bike[] {
 const specifications = (value?: number, unit = "") =>
   value == null ? "Not available" : `${value}${unit}`;
 
-/* One main photo per bike. Commons first, Wikipedia fallback. */
+/* One photo per bike, with Wikimedia Commons and Wikipedia fallback. */
 
 type Photo = {
   url: string;
@@ -149,8 +149,7 @@ function BikePhoto({ name }: { name: string }) {
       setPhoto(null);
 
       try {
-        // Try Commons first, using the full model name.
-        const commonsParams = new URLSearchParams({
+        const params = new URLSearchParams({
           action: "query",
           generator: "search",
           gsrsearch: `filetype:bitmap "${name}"`,
@@ -166,7 +165,7 @@ function BikePhoto({ name }: { name: string }) {
 
         try {
           const response = await fetch(
-            `https://commons.wikimedia.org/w/api.php?${commonsParams}`,
+            `https://commons.wikimedia.org/w/api.php?${params}`,
             { signal: controller.signal }
           );
 
@@ -214,8 +213,7 @@ function BikePhoto({ name }: { name: string }) {
                 const url = info?.thumburl ?? info?.url;
                 const required = Math.max(1, Math.ceil(words.length * 0.6));
 
-                return Boolean(url) &&
-                  (exact || matched >= required);
+                return Boolean(url) && (exact || matched >= required);
               })
               .sort((a, b) =>
                 Number(b.exact) - Number(a.exact) ||
@@ -249,7 +247,6 @@ function BikePhoto({ name }: { name: string }) {
           ) return;
         }
 
-        // Fallback source: Wikipedia.
         if (cancelled) return;
 
         const wikiParams = new URLSearchParams({
@@ -347,7 +344,6 @@ function BikePhoto({ name }: { name: string }) {
               onError={() => setPhoto(null)}
             />
           </a>
-
           <small className="photo-credit">
             <a href={photo.page} target="_blank" rel="noreferrer">
               {photo.credit || "View photo source"}
@@ -358,10 +354,7 @@ function BikePhoto({ name }: { name: string }) {
       ) : (
         <div className="bike-photo-placeholder">
           <span className="bike-photo-icon">🏍️</span>
-          <small>
-            {loading ? "Finding bike photo..." : "Photo unavailable"}
-          </small>
-
+          <small>{loading ? "Finding bike photo..." : "Photo unavailable"}</small>
           {!loading && (
             <a
               href={`https://commons.wikimedia.org/wiki/Special:MediaSearch?type=image&search=${encodeURIComponent(name + " motorcycle")}`}
@@ -370,6 +363,110 @@ function BikePhoto({ name }: { name: string }) {
             >
               Search photos
             </a>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/*
+ * Reusable autocomplete input.
+ * User can type, edit spelling, see live suggestions and select a result.
+ */
+
+type BikeAutocompleteProps = {
+  id: string;
+  label: string;
+  value: string;
+  bikes: Bike[];
+  onSelect: (name: string) => void;
+};
+
+function BikeAutocomplete({
+  id,
+  label,
+  value,
+  bikes,
+  onSelect,
+}: BikeAutocompleteProps) {
+  const [query, setQuery] = useState(value);
+  const [focused, setFocused] = useState(false);
+
+  useEffect(() => {
+    setQuery(value);
+  }, [value]);
+
+  const suggestions = useMemo(
+    () => getBikeSuggestions(query, bikes),
+    [query, bikes]
+  );
+
+  function chooseBike(bike: Bike) {
+    setQuery(bike.name);
+    onSelect(bike.name);
+    setFocused(false);
+  }
+
+  return (
+    <div className="autocomplete-field">
+      <label htmlFor={id}>{label}</label>
+
+      <input
+        id={id}
+        type="text"
+        value={query}
+        placeholder="Type bike name..."
+        autoComplete="off"
+        spellCheck={false}
+        onFocus={() => setFocused(true)}
+        onBlur={() => {
+          window.setTimeout(() => setFocused(false), 150);
+        }}
+        onChange={(event) => {
+          const next = event.target.value;
+          setQuery(next);
+          setFocused(true);
+
+          // If the user clears the box, clear the selected bike too.
+          if (!next.trim()) onSelect("");
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" && suggestions.length > 0) {
+            event.preventDefault();
+            chooseBike(suggestions[0]);
+          }
+
+          if (event.key === "Escape") {
+            setFocused(false);
+          }
+        }}
+      />
+
+      {focused && query.trim() && (
+        <div className="suggestions autocomplete-suggestions">
+          {suggestions.length > 0 ? (
+            <>
+              <p className="muted">Matching bikes — tap to select:</p>
+              {suggestions.map((bike) => (
+                <button
+                  type="button"
+                  className="suggestion"
+                  key={bike.name}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => chooseBike(bike)}
+                >
+                  <span>{bike.name}</span>
+                  <small>
+                    {specifications(bike.mileage, " km/L")}
+                  </small>
+                </button>
+              ))}
+            </>
+          ) : (
+            <p className="muted suggestion-empty">
+              Matching bike illa. Spelling check cheyyu.
+            </p>
           )}
         </div>
       )}
@@ -416,7 +513,7 @@ function App() {
     try {
       localStorage.setItem("bike-app-theme", theme);
     } catch {
-      // Continue using the selected theme for this session.
+      // Keep the selected theme for this session.
     }
   }, [theme]);
 
@@ -512,8 +609,8 @@ function App() {
     [search, bikes]
   );
 
-  const bikeA = bikes.find((bike) => bike.name === first) ?? bikes[0];
-  const bikeB = bikes.find((bike) => bike.name === second) ?? bikes[1] ?? bikes[0];
+  const bikeA = bikes.find((bike) => bike.name === first);
+  const bikeB = bikes.find((bike) => bike.name === second);
 
   const price = Math.max(0, Number(petrol) || 0);
   const km = Math.max(0, Number(dailyKm) || 0);
@@ -552,9 +649,7 @@ function App() {
     setFirst(selected.name);
     setSearch(selected.name);
     setSearchMessage(
-      exact
-        ? "Bike found."
-        : `Closest match: ${selected.name}`
+      exact ? "Bike found." : `Closest match: ${selected.name}`
     );
   }
 
@@ -602,7 +697,9 @@ function App() {
         "auth/operation-not-allowed": "Firebase-il Email/Password sign-in enable cheyyanam.",
       };
 
-      setMessage(errors[code] ?? "Authentication failed. Firebase settings check cheyyu.");
+      setMessage(
+        errors[code] ?? "Authentication failed. Firebase settings check cheyyu."
+      );
     } finally {
       setSending(false);
     }
@@ -659,7 +756,11 @@ function App() {
   }
 
   if (authLoading) {
-    return <main className="app"><section className="panel">Loading...</section></main>;
+    return (
+      <main className="app">
+        <section className="panel">Loading...</section>
+      </main>
+    );
   }
 
   if (!user) {
@@ -677,7 +778,11 @@ function App() {
 
         <section className="panel">
           <h2>🔐 {authMode === "login" ? "Welcome Back" : "Create Account"}</h2>
-          <p>{authMode === "login" ? "Emailum passwordum use cheythu login cheyyu." : "Puthiya account create cheyyuka."}</p>
+          <p>
+            {authMode === "login"
+              ? "Emailum passwordum use cheythu login cheyyu."
+              : "Puthiya account create cheyyuka."}
+          </p>
 
           <form onSubmit={handleAuth}>
             <label htmlFor="loginEmail">Email address</label>
@@ -695,7 +800,9 @@ function App() {
             <input
               id="loginPassword"
               type="password"
-              autoComplete={authMode === "login" ? "current-password" : "new-password"}
+              autoComplete={
+                authMode === "login" ? "current-password" : "new-password"
+              }
               placeholder="Minimum 6 characters"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -704,7 +811,11 @@ function App() {
             />
 
             <button className="primary" type="submit" disabled={sending}>
-              {sending ? "Please wait..." : authMode === "login" ? "Login" : "Create Account"}
+              {sending
+                ? "Please wait..."
+                : authMode === "login"
+                  ? "Login"
+                  : "Create Account"}
             </button>
           </form>
 
@@ -717,7 +828,9 @@ function App() {
               setMessage("");
             }}
           >
-            {authMode === "login" ? "Create New Account" : "Already have an account? Login"}
+            {authMode === "login"
+              ? "Create New Account"
+              : "Already have an account? Login"}
           </button>
 
           {message && <p role="status" className="muted">{message}</p>}
@@ -744,22 +857,41 @@ function App() {
         <details>
           <summary>👤 Account</summary>
           <p>Logged in as <strong>{user.email}</strong></p>
-          <button className="secondary" type="button" onClick={handleLogout}>Log out</button>
+          <button className="secondary" type="button" onClick={handleLogout}>
+            Log out
+          </button>
           {message && <p role="status" className="muted">{message}</p>}
         </details>
       </section>
 
       <nav className="nav">
-        <button className={tab === "search" ? "nav-active" : ""} onClick={() => setTab("search")}>Bike Search</button>
-        <button className={tab === "compare" ? "nav-active" : ""} onClick={() => setTab("compare")}>Bike Comparison</button>
-        <button className={tab === "petrol" ? "nav-active" : ""} onClick={() => setTab("petrol")}>Petrol Comparison</button>
+        <button
+          className={tab === "search" ? "nav-active" : ""}
+          onClick={() => setTab("search")}
+        >
+          Bike Search
+        </button>
+        <button
+          className={tab === "compare" ? "nav-active" : ""}
+          onClick={() => setTab("compare")}
+        >
+          Bike Comparison
+        </button>
+        <button
+          className={tab === "petrol" ? "nav-active" : ""}
+          onClick={() => setTab("petrol")}
+        >
+          Petrol Comparison
+        </button>
       </nav>
 
       {tab === "search" && (
         <>
           <section className="panel">
             <h2>🔎 Find a bike</h2>
-            <p className="muted">{dbLoading ? "Loading online bike catalogue..." : dbMessage}</p>
+            <p className="muted">
+              {dbLoading ? "Loading online bike catalogue..." : dbMessage}
+            </p>
 
             <form onSubmit={runSearch}>
               <label htmlFor="bikeSearch">Bike name</label>
@@ -776,14 +908,18 @@ function App() {
                 spellCheck={false}
               />
 
-              <button className="primary" type="submit">🔍 Search bike</button>
+              <button className="primary" type="submit">
+                🔍 Search bike
+              </button>
             </form>
 
             <p className="muted">
               Enter key അമർത്തിയും search ചെയ്യാം. Suggestions optional ആണ്.
             </p>
 
-            {searchMessage && <p role="status" className="muted">{searchMessage}</p>}
+            {searchMessage && (
+              <p role="status" className="muted">{searchMessage}</p>
+            )}
 
             {search.trim() && suggestions.length > 0 && (
               <div className="suggestions">
@@ -809,20 +945,42 @@ function App() {
 
           <section className="panel">
             <h2>Selected bike</h2>
-            <BikePhoto name={bikeA.name} />
-            <h3>{bikeA.name}</h3>
+            {bikeA ? (
+              <>
+                <BikePhoto name={bikeA.name} />
+                <h3>{bikeA.name}</h3>
 
-            <div className="stats">
-              <div><span>Estimated mileage</span><strong>{specifications(bikeA.mileage, " km/L")}</strong></div>
-              <div><span>Fuel tank</span><strong>{specifications(bikeA.tank, " L")}</strong></div>
-              <div><span>Indicative price</span><strong>{bikeA.price == null ? "Not available" : `${money(bikeA.price)}*`}</strong></div>
-            </div>
+                <div className="stats">
+                  <div>
+                    <span>Estimated mileage</span>
+                    <strong>{specifications(bikeA.mileage, " km/L")}</strong>
+                  </div>
+                  <div>
+                    <span>Fuel tank</span>
+                    <strong>{specifications(bikeA.tank, " L")}</strong>
+                  </div>
+                  <div>
+                    <span>Indicative price</span>
+                    <strong>
+                      {bikeA.price == null ? "Not available" : `${money(bikeA.price)}*`}
+                    </strong>
+                  </div>
+                </div>
 
-            <button className="secondary" type="button" onClick={() => setTab("compare")}>
-              Compare this bike
-            </button>
-
-            <p className="muted">*Sample estimates only; not verified current dealer prices.</p>
+                <button
+                  className="secondary"
+                  type="button"
+                  onClick={() => setTab("compare")}
+                >
+                  Compare this bike
+                </button>
+                <p className="muted">
+                  *Sample estimates only; not verified current dealer prices.
+                </p>
+              </>
+            ) : (
+              <p className="muted">Select a bike to see its details.</p>
+            )}
           </section>
         </>
       )}
@@ -830,31 +988,77 @@ function App() {
       {tab === "compare" && (
         <section className="panel">
           <h2>🏁 Bike comparison</h2>
+          <p className="muted">
+            Bike name type cheyyu. Suggestions-il ninnu select cheyyaam.
+          </p>
 
-          <label htmlFor="bikeA">First bike</label>
-          <select id="bikeA" value={first} onChange={(e) => setFirst(e.target.value)}>
-            {bikes.map((bike) => <option key={bike.name} value={bike.name}>{bike.name}</option>)}
-          </select>
+          <BikeAutocomplete
+            id="bikeA"
+            label="First bike"
+            value={first}
+            bikes={bikes}
+            onSelect={setFirst}
+          />
 
-          <label htmlFor="bikeB">Second bike</label>
-          <select id="bikeB" value={second} onChange={(e) => setSecond(e.target.value)}>
-            {bikes.map((bike) => <option key={bike.name} value={bike.name}>{bike.name}</option>)}
-          </select>
+          <BikeAutocomplete
+            id="bikeB"
+            label="Second bike"
+            value={second}
+            bikes={bikes}
+            onSelect={setSecond}
+          />
 
           <div className="compare-grid">
-            {[bikeA, bikeB].map((bike, index) => (
-              <div className="compare-card" key={`${bike.name}-${index}`}>
-                <BikePhoto name={bike.name} />
-                <h3>{bike.name}</h3>
-                <p><span>Estimated mileage</span><strong>{specifications(bike.mileage, " km/L")}</strong></p>
-                <p><span>Fuel tank</span><strong>{specifications(bike.tank, " L")}</strong></p>
-                <p><span>Indicative price</span><strong>{bike.price == null ? "Not available" : `${money(bike.price)}*`}</strong></p>
-                <p><span>Fuel cost per km</span><strong>{bike.mileage == null || bike.mileage <= 0 ? "Not available" : money(price / bike.mileage)}</strong></p>
-              </div>
-            ))}
+            {[bikeA, bikeB].map((bike, index) =>
+              bike ? (
+                <div className="compare-card" key={`${bike.name}-${index}`}>
+                  <BikePhoto name={bike.name} />
+                  <h3>{bike.name}</h3>
+                  <p>
+                    <span>Estimated mileage</span>
+                    <strong>{specifications(bike.mileage, " km/L")}</strong>
+                  </p>
+                  <p>
+                    <span>Fuel tank</span>
+                    <strong>{specifications(bike.tank, " L")}</strong>
+                  </p>
+                  <p>
+                    <span>Indicative price</span>
+                    <strong>
+                      {bike.price == null ? "Not available" : `${money(bike.price)}*`}
+                    </strong>
+                  </p>
+                  <p>
+                    <span>Fuel cost per km</span>
+                    <strong>
+                      {bike.mileage == null || bike.mileage <= 0
+                        ? "Not available"
+                        : money(price / bike.mileage)}
+                    </strong>
+                  </p>
+                </div>
+              ) : null
+            )}
           </div>
 
-          <p className="muted">Online catalogue provides model names, not verified specifications.</p>
+          {bikeA && bikeB && (
+            <div className="result">
+              <span>Comparison summary</span>
+              <p>
+                {bikeA.name === bikeB.name
+                  ? "Randilum same bike aanu select cheythirikkunnath."
+                  : bikeA.mileage == null || bikeB.mileage == null
+                    ? "Mileage comparison-inu specification data available alla."
+                    : bikeA.mileage === bikeB.mileage
+                      ? "Randinum same listed mileage aanu."
+                      : `${bikeA.mileage > bikeB.mileage ? bikeA.name : bikeB.name} has the higher listed mileage.`}
+              </p>
+            </div>
+          )}
+
+          <p className="muted">
+            Online catalogue provides model names, not verified specifications.
+          </p>
         </section>
       )}
 
@@ -863,27 +1067,68 @@ function App() {
           <h2>⛽ Petrol cost comparison</h2>
 
           <label htmlFor="petrol">Petrol price (₹/litre)</label>
-          <input id="petrol" type="number" min="0" step="0.01" value={petrol} onChange={(e) => setPetrol(e.target.value)} />
+          <input
+            id="petrol"
+            type="number"
+            min="0"
+            step="0.01"
+            value={petrol}
+            onChange={(e) => setPetrol(e.target.value)}
+          />
 
-          <p className="muted">Petrol price manually enter cheyyuka. This is not a live rate feed.</p>
+          <p className="muted">
+            Petrol price manually enter cheyyuka. This is not a live rate feed.
+          </p>
 
           <label htmlFor="dailyKm">Daily distance (km)</label>
-          <input id="dailyKm" type="number" min="0" step="0.1" value={dailyKm} onChange={(e) => setDailyKm(e.target.value)} />
+          <input
+            id="dailyKm"
+            type="number"
+            min="0"
+            step="0.1"
+            value={dailyKm}
+            onChange={(e) => setDailyKm(e.target.value)}
+          />
 
           <label htmlFor="days">Number of days</label>
-          <input id="days" type="number" min="0" step="1" value={days} onChange={(e) => setDays(e.target.value)} />
+          <input
+            id="days"
+            type="number"
+            min="0"
+            step="1"
+            value={days}
+            onChange={(e) => setDays(e.target.value)}
+          />
 
           <div className="compare-grid">
             {[bikeA, bikeB].map((bike, index) => {
+              if (!bike) return null;
               const cost = costFor(bike);
 
               return (
                 <div className="compare-card" key={`${bike.name}-${index}`}>
                   <BikePhoto name={bike.name} />
                   <h3>{bike.name}</h3>
-                  <p><span>Estimated total fuel cost</span><strong>{cost == null ? "Not available" : money(cost)}</strong></p>
-                  <p><span>Estimated fuel required</span><strong>{bike.mileage == null || bike.mileage <= 0 ? "Not available" : `${(totalKm / bike.mileage).toFixed(2)} L`}</strong></p>
-                  <p><span>Daily cost</span><strong>{bike.mileage == null || bike.mileage <= 0 ? "Not available" : money((km / bike.mileage) * price)}</strong></p>
+                  <p>
+                    <span>Estimated total fuel cost</span>
+                    <strong>{cost == null ? "Not available" : money(cost)}</strong>
+                  </p>
+                  <p>
+                    <span>Estimated fuel required</span>
+                    <strong>
+                      {bike.mileage == null || bike.mileage <= 0
+                        ? "Not available"
+                        : `${(totalKm / bike.mileage).toFixed(2)} L`}
+                    </strong>
+                  </p>
+                  <p>
+                    <span>Daily cost</span>
+                    <strong>
+                      {bike.mileage == null || bike.mileage <= 0
+                        ? "Not available"
+                        : money((km / bike.mileage) * price)}
+                    </strong>
+                  </p>
                 </div>
               );
             })}
@@ -892,12 +1137,14 @@ function App() {
           <div className="result">
             <span>Estimated difference over {numberOfDays} days</span>
             <strong>
-              {costFor(bikeA) == null || costFor(bikeB) == null
+              {!bikeA || !bikeB || costFor(bikeA) == null || costFor(bikeB) == null
                 ? "Not available"
                 : money(Math.abs(costFor(bikeA)! - costFor(bikeB)!))}
             </strong>
             <p>
-              {bikeA.mileage == null || bikeB.mileage == null || bikeA.mileage <= 0 || bikeB.mileage <= 0
+              {!bikeA || !bikeB ||
+              bikeA.mileage == null || bikeB.mileage == null ||
+              bikeA.mileage <= 0 || bikeB.mileage <= 0
                 ? "Comparison-inu randu bikes-inte mileage data venam."
                 : bikeA.mileage === bikeB.mileage
                   ? "Both bikes have the same listed mileage."
@@ -909,7 +1156,9 @@ function App() {
 
       <footer>
         Bike model catalogue:{" "}
-        <a href="https://vehiclesdb.com" target="_blank" rel="noreferrer">VehiclesDB</a>.
+        <a href="https://vehiclesdb.com" target="_blank" rel="noreferrer">
+          VehiclesDB
+        </a>.
         <p>Catalogue model names are not verified prices or specifications.</p>
         <p>Photos are sourced from Wikimedia Commons or Wikipedia when available.</p>
         <p>Created by Nidhin ❤️</p>
