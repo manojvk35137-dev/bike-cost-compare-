@@ -292,11 +292,12 @@ footer {
 }
 
 /* Prevent unwanted horizontal sliding */
+
 html,
 body,
 #root {
   width: 100%;
-  max-width: 100%;
+  min-height: 100%;
   margin: 0;
   overflow-x: hidden;
 }
@@ -304,42 +305,23 @@ body,
 .app {
   width: 100%;
   max-width: 720px;
+  min-height: 100vh;
   margin: 0 auto;
-  overflow-x: clip;
+  padding: 12px;
+  overflow-x: hidden;
+  overflow-y: visible;
 }
 
-.panel,
-header,
-.nav,
-.compare-grid,
-.compare-card {
+.panel {
   min-width: 0;
-  max-width: 100%;
 }
 
-input,
-select,
-button {
-  max-width: 100%;
-}
+@media (max-width: 420px) {
+  .app {
+    padding: 10px;
+  }
 
-.nav button {
-  min-width: 0;
-  overflow-wrap: anywhere;
+  .panel {
+    padding: 14px;
+  }
 }
-
-html,
-body,
-#root {
-  width: 100%;
-  height: 100%;
-  margin: 0;
-  overflow: hidden;
-}
-
-.app {
-  height: 100vh;
-  height: 100dvh;
-  overflow: hidden;
-}
-
