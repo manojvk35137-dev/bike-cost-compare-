@@ -1,6 +1,15 @@
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
+import {
+  onAuthStateChanged,
+  sendSignInLinkToEmail,
+  isSignInWithEmailLink,
+  signInWithEmailLink,
+  signOut,
+  type User,
+} from "firebase/auth";
+import { auth } from "./firebase";
 import "./style.css";
 
 type Bike = {
@@ -29,31 +38,157 @@ const bikes: Bike[] = [
   { name: "Hero Splendor Plus", mileage: 60, tank: 9.8, price: 80000 },
 ];
 
+const money = (value: number) =>
+  "₹" + value.toLocaleString("en-IN", { maximumFractionDigits: 2 });
+
 function App() {
+  const [user, setUser] = useState<User | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [email, setEmail] = useState("");
+  const [message, setMessage] = useState("");
+  const [sending, setSending] = useState(false);
+
   const [search, setSearch] = useState("");
-  const [selected, setSelected] = useState<Bike | null>(bikes[0]);
+  const [first, setFirst] = useState(bikes[0].name);
+  const [second, setSecond] = useState(bikes[1].name);
   const [petrol, setPetrol] = useState("106");
   const [dailyKm, setDailyKm] = useState("30");
   const [days, setDays] = useState("30");
-  const [customMileage, setCustomMileage] = useState("");
+  const [tab, setTab] = useState("search");
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      setAuthLoading(false);
+    });
+
+    return unsubscribe;
+  }, []);
+
+  useEffect(() => {
+    async function finishEmailLogin() {
+      if (!isSignInWithEmailLink(auth, window.location.href)) return;
+
+      let savedEmail = window.localStorage.getItem("bikeLoginEmail");
+
+      if (!savedEmail) {
+        savedEmail = window.prompt(
+          "Enter the email address where you received the sign-in link:"
+        );
+      }
+
+      if (!savedEmail) {
+        setMessage("Login complete cheyyaan email address venam.");
+        return;
+      }
+
+      try {
+        await signInWithEmailLink(
+          auth,
+          savedEmail.trim(),
+          window.location.href
+        );
+        window.localStorage.removeItem("bikeLoginEmail");
+        window.history.replaceState({}, document.title, window.location.pathname);
+        setMessage("Login successful!");
+      } catch {
+        setMessage(
+          "Login link invalid or expired. App-il puthiya sign-in link request cheyyu."
+        );
+      }
+    }
+
+    void finishEmailLogin();
+  }, []);
+
+  const sendLoginLink = async () => {
+    const cleanEmail = email.trim();
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      setMessage("Valid email address enter cheyyu.");
+      return;
+    }
+
+    setSending(true);
+    setMessage("");
+
+    try {
+      await sendSignInLinkToEmail(auth, cleanEmail, {
+        url: window.location.origin + window.location.pathname,
+        handleCodeInApp: true,
+      });
+
+      window.localStorage.setItem("bikeLoginEmail", cleanEmail);
+      setMessage("Email-il sign-in link ayachittundu. Inbox check cheyyu!");
+    } catch (error) {
+      console.error(error);
+      setMessage(
+        "Link send aayilla. Firebase Email link settingsum Authorized domainsum check cheyyu."
+      );
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const bikeA = bikes.find((b) => b.name === first) ?? bikes[0];
+  const bikeB = bikes.find((b) => b.name === second) ?? bikes[1];
 
   const suggestions = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return bikes.slice(0, 8);
     return bikes
-      .filter((b) => b.name.toLowerCase().includes(q))
-      .slice(0, 8);
+      .filter((bike) => !q || bike.name.toLowerCase().includes(q))
+      .slice(0, 10);
   }, [search]);
 
   const price = Math.max(0, Number(petrol) || 0);
   const km = Math.max(0, Number(dailyKm) || 0);
   const numberOfDays = Math.max(0, Number(days) || 0);
-  const mileage = Math.max(
-    0,
-    Number(customMileage) || selected?.mileage || 0
-  );
-  const litres = mileage > 0 ? (km * numberOfDays) / mileage : 0;
-  const totalCost = litres * price;
+  const totalKm = km * numberOfDays;
+
+  const costFor = (bike: Bike) =>
+    bike.mileage > 0 ? (totalKm / bike.mileage) * price : 0;
+
+  if (authLoading) {
+    return <main className="app"><section className="panel">Loading...</section></main>;
+  }
+
+  if (!user) {
+    return (
+      <main className="app">
+        <header>
+          <div className="logo">🏍️</div>
+          <div>
+            <h1>Bike Cost Compare</h1>
+            <p>Simple, smart bike comparison.</p>
+          </div>
+        </header>
+
+        <section className="panel">
+          <h2>🔐 Passwordless login</h2>
+          <p>Enter your email. We will send you a secure sign-in link.</p>
+          <label htmlFor="loginEmail">Email address</label>
+          <input
+            id="loginEmail"
+            type="email"
+            autoComplete="email"
+            placeholder="you@example.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+          <button className="primary" onClick={sendLoginLink} disabled={sending}>
+            {sending ? "Sending..." : "Send sign-in link"}
+          </button>
+          {message && <p role="status" className="muted">{message}</p>}
+          <p className="muted">
+            Check your inbox and spam folder. Open the link in the same app or
+            browser where you started login.
+          </p>
+        </section>
+
+        <footer>Created by Nidhin ❤️</footer>
+      </main>
+    );
+  }
 
   return (
     <main className="app">
@@ -66,127 +201,133 @@ function App() {
       </header>
 
       <section className="panel">
-        <h2>🔎 Find a bike</h2>
-        <label htmlFor="bikeSearch">Bike name</label>
-        <input
-          id="bikeSearch"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Type e.g. Bullet 350"
-          autoComplete="off"
-        />
-
-        <div className="suggestions">
-          {suggestions.map((bike) => (
-            <button
-              className={
-                selected?.name === bike.name ? "suggestion active" : "suggestion"
-              }
-              key={bike.name}
-              onClick={() => {
-                setSelected(bike);
-                setSearch(bike.name);
-                setCustomMileage("");
-              }}
-            >
-              <span>{bike.name}</span>
-              <small>{bike.mileage} km/L*</small>
-            </button>
-          ))}
-          {suggestions.length === 0 && (
-            <p className="muted">
-              No exact match. Check the spelling or try a shorter name.
-              This starter version has a limited bike list.
-            </p>
-          )}
-        </div>
+        <p>Logged in as <strong>{user.email}</strong></p>
+        <button className="secondary" onClick={() => signOut(auth)}>
+          Log out
+        </button>
       </section>
 
-      {selected && (
+      <nav className="nav">
+        <button className={tab === "search" ? "nav-active" : ""} onClick={() => setTab("search")}>Bike search</button>
+        <button className={tab === "compare" ? "nav-active" : ""} onClick={() => setTab("compare")}>Bike comparison</button>
+        <button className={tab === "petrol" ? "nav-active" : ""} onClick={() => setTab("petrol")}>Petrol comparison</button>
+      </nav>
+
+      {tab === "search" && (
+        <>
+          <section className="panel">
+            <h2>🔎 Find a bike</h2>
+            <label htmlFor="bikeSearch">Bike name</label>
+            <input
+              id="bikeSearch"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Type e.g. Bullet 350"
+              autoComplete="off"
+            />
+            <div className="suggestions">
+              {suggestions.map((bike) => (
+                <button
+                  className="suggestion"
+                  key={bike.name}
+                  onClick={() => {
+                    setFirst(bike.name);
+                    setSearch(bike.name);
+                    setTab("compare");
+                  }}
+                >
+                  <span>{bike.name}</span>
+                  <small>{bike.mileage} km/L*</small>
+                </button>
+              ))}
+              {suggestions.length === 0 && (
+                <p className="muted">
+                  No match in the current sample list. Try a shorter spelling.
+                </p>
+              )}
+            </div>
+          </section>
+          <section className="panel">
+            <h2>Selected bike</h2>
+            <h3>{bikeA.name}</h3>
+            <div className="stats">
+              <div><span>Estimated mileage</span><strong>{bikeA.mileage} km/L*</strong></div>
+              <div><span>Fuel tank</span><strong>{bikeA.tank} L*</strong></div>
+              <div><span>Indicative price</span><strong>{money(bikeA.price)}*</strong></div>
+            </div>
+            <p className="muted">*Sample estimates, not verified current specifications or on-road prices.</p>
+          </section>
+        </>
+      )}
+
+      {tab === "compare" && (
         <section className="panel">
-          <h2>🏁 Selected bike</h2>
-          <h3>{selected.name}</h3>
-          <div className="stats">
-            <div><span>Estimated mileage</span><strong>{selected.mileage} km/L*</strong></div>
-            <div><span>Fuel tank</span><strong>{selected.tank} L*</strong></div>
-            <div><span>Indicative price</span><strong>₹{selected.price.toLocaleString("en-IN")}*</strong></div>
+          <h2>🏁 Bike comparison</h2>
+          <label htmlFor="bikeA">First bike</label>
+          <select id="bikeA" value={first} onChange={(e) => setFirst(e.target.value)}>
+            {bikes.map((b) => <option key={b.name} value={b.name}>{b.name}</option>)}
+          </select>
+
+          <label htmlFor="bikeB">Second bike</label>
+          <select id="bikeB" value={second} onChange={(e) => setSecond(e.target.value)}>
+            {bikes.map((b) => <option key={b.name} value={b.name}>{b.name}</option>)}
+          </select>
+
+          <div className="compare-grid">
+            {[bikeA, bikeB].map((bike) => (
+              <div className="compare-card" key={bike.name}>
+                <h3>{bike.name}</h3>
+                <p><span>Estimated mileage</span><strong>{bike.mileage} km/L*</strong></p>
+                <p><span>Fuel tank</span><strong>{bike.tank} L*</strong></p>
+                <p><span>Indicative price</span><strong>{money(bike.price)}*</strong></p>
+                <p><span>Cost per km</span><strong>{money(price / bike.mileage)}</strong></p>
+              </div>
+            ))}
           </div>
-          <p className="muted">
-            *Approximate sample values, not verified current specifications or
-            on-road prices. Real mileage and price vary by model, year and location.
-          </p>
+          <p className="muted">*Approximate sample data. Confirm model year and local dealer prices.</p>
         </section>
       )}
 
-      <section className="panel">
-        <h2>⛽ Petrol cost calculator</h2>
+      {tab === "petrol" && (
+        <section className="panel">
+          <h2>⛽ Petrol cost comparison</h2>
+          <label htmlFor="petrol">Petrol price (₹/litre)</label>
+          <input id="petrol" type="number" min="0" step="0.01" value={petrol} onChange={(e) => setPetrol(e.target.value)} />
+          <p className="muted">Enter the current rate yourself. This is not a live petrol-price feed.</p>
 
-        <label htmlFor="petrol">Petrol price (₹/litre)</label>
-        <input
-          id="petrol"
-          type="number"
-          min="0"
-          step="0.01"
-          value={petrol}
-          onChange={(e) => setPetrol(e.target.value)}
-        />
+          <label htmlFor="dailyKm">Daily distance (km)</label>
+          <input id="dailyKm" type="number" min="0" value={dailyKm} onChange={(e) => setDailyKm(e.target.value)} />
 
-        <label htmlFor="mileage">Your bike mileage (km/litre)</label>
-        <input
-          id="mileage"
-          type="number"
-          min="0"
-          step="0.1"
-          value={customMileage || String(selected?.mileage ?? "")}
-          onChange={(e) => setCustomMileage(e.target.value)}
-        />
+          <label htmlFor="days">Number of days</label>
+          <input id="days" type="number" min="0" value={days} onChange={(e) => setDays(e.target.value)} />
 
-        <label htmlFor="dailyKm">Daily distance (km)</label>
-        <input
-          id="dailyKm"
-          type="number"
-          min="0"
-          value={dailyKm}
-          onChange={(e) => setDailyKm(e.target.value)}
-        />
-
-        <label htmlFor="days">Number of days</label>
-        <input
-          id="days"
-          type="number"
-          min="0"
-          value={days}
-          onChange={(e) => setDays(e.target.value)}
-        />
-
-        <div className="result">
-          <span>Estimated total petrol cost</span>
-          <strong>₹{totalCost.toLocaleString("en-IN", { maximumFractionDigits: 2 })}</strong>
-          <p>{litres.toFixed(2)} litres needed for {km * numberOfDays} km</p>
-        </div>
-
-        <div className="stats">
-          <div>
-            <span>Daily cost</span>
-            <strong>₹{(km / (mileage || 1) * price).toFixed(2)}</strong>
+          <div className="compare-grid">
+            {[bikeA, bikeB].map((bike) => (
+              <div className="compare-card" key={bike.name}>
+                <h3>{bike.name}</h3>
+                <p><span>Estimated total fuel cost</span><strong>{money(costFor(bike))}</strong></p>
+                <p><span>Estimated fuel required</span><strong>{(totalKm / bike.mileage).toFixed(2)} L</strong></p>
+                <p><span>Daily cost</span><strong>{money((km / bike.mileage) * price)}</strong></p>
+              </div>
+            ))}
           </div>
-          <div>
-            <span>Cost per km</span>
-            <strong>₹{(price / (mileage || 1)).toFixed(2)}</strong>
+
+          <div className="result">
+            <span>Estimated savings over {numberOfDays} days</span>
+            <strong>{money(Math.abs(costFor(bikeA) - costFor(bikeB)))}</strong>
+            <p>{bikeA.mileage >= bikeB.mileage ? bikeA.name : bikeB.name} has the higher listed sample mileage.</p>
           </div>
-        </div>
-      </section>
+        </section>
+      )}
 
       <footer>
-        Fuel estimates only. Confirm specifications and prices with the
-        manufacturer or authorised dealer before making a purchase.
+        Bike data in this version is a small sample list, not an online API.
+        Fuel costs are estimates. Created by Nidhin ❤️
       </footer>
     </main>
   );
 }
 
 createRoot(document.getElementById("root")!).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
+  <React.StrictMode><App /></React.StrictMode>
 );
